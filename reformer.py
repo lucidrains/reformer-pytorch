@@ -317,7 +317,7 @@ class Reformer(nn.Module):
         self.to_logits = nn.Linear(emb, num_tokens)
 
     def forward(self, x):
-        x = self.token_emb(x) + self.pos_emb(torch.arange(0, x.shape[1]))
+        x = self.token_emb(x) + self.pos_emb(torch.arange(0, x.shape[1], device=x.device))
         x = torch.cat([x, x], dim = -1)
         x = self.layers(x)
         x = torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
