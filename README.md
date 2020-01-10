@@ -30,9 +30,10 @@ model = Reformer(
     max_seq_len = 1024,
     num_tokens= 20000,
     heads = 8,
-    bucket_size = 64,
-    n_hashes = 8,
-    ff_chunks = 200
+    bucket_size = 64,    # average size of qk per bucket, 64 was recommended in paper
+    n_hashes = 8,        # should keep at 8 per paper
+    ff_chunks = 200,     # number of chunks for feedforward layer
+    weight_tie = False   # tie parameters of each layer for no memory per additional depth
 )
 
 x = torch.randint(0, 20000, (1, 1024)).long()

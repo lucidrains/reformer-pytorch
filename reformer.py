@@ -18,6 +18,16 @@ def batched_index_select(values, indices):
     b = values.shape[0]
     return values[torch.arange(0, b), indices.transpose(0, 1)].transpose(0, 1)
 
+def cache_fn(f):
+    cache = None
+    def cached_fn(*args, **kwargs):
+        nonlocal cache
+        if cache is not None:
+            return cache
+        cache = f(*args, **kwargs)
+        return cache
+    return cached_fn
+
 # helper classes
 
 class WithLayerNorm(nn.Module):
@@ -297,17 +307,25 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False):
+    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
         self.token_emb = nn.Embedding(num_tokens, emb)
         self.pos_emb = nn.Embedding(max_seq_len, emb)
 
+        get_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal)
+        get_ff = lambda: FeedForward(emb)
+
+        if weight_tie:
+            get_attn = cache_fn(get_attn)
+            get_ff = cache_fn(get_ff)
+
         blocks = []
+
         for _ in range(depth):
-            attn = LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal)
-            ff_net = FeedForward(emb)
+            attn = get_attn()
+            ff_net = get_ff()
 
             f = WithLayerNorm(emb, attn)
             g = Chunk(ff_chunks, WithLayerNorm(emb, ff_net), along_dim = -2)
