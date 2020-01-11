@@ -307,14 +307,14 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False):
+    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0.):
         super().__init__()
         self.emb = emb
         self.depth = depth
         self.token_emb = nn.Embedding(num_tokens, emb)
         self.pos_emb = nn.Embedding(max_seq_len, emb)
 
-        get_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal)
+        get_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout)
         get_ff = lambda: FeedForward(emb)
 
         if weight_tie:
