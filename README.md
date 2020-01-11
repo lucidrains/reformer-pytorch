@@ -30,6 +30,7 @@ model = Reformer(
     max_seq_len = 1024,
     num_tokens= 20000,
     heads = 8,
+    causal = True,       # auto-regressive or not
     bucket_size = 64,    # average size of qk per bucket, 64 was recommended in paper
     n_hashes = 8,        # should keep at 8 per paper
     ff_chunks = 200,     # number of chunks for feedforward layer
