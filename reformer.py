@@ -67,7 +67,6 @@ class LSHAttention(nn.Module):
                   rehash_each_round = True,
                   drop_for_hash_rate = 0.0):
         super().__init__()
-
         if dropout >= 1.0:
             raise ValueError('Dropout rates must be lower than 1.')
 
@@ -193,16 +192,16 @@ class LSHAttention(nn.Module):
         # Causal masking
         if self.causal:
             mask = bq_t[:, :, :, None] < bkv_t[:, :, None, :]
-            dots = dots - 1e9 * mask
+            dots[mask] = float('-inf')
 
         # Mask out attention to self except when no other targets are available.
         self_mask = bq_t[:, :, :, None] == bkv_t[:, :, None, :]
-        dots = dots - 1e5 * self_mask
+        dots[self_mask] = - 1e5
 
         # Mask out attention to other hash buckets.
         if not self._attend_across_buckets:
             bucket_mask = bq_buckets[:, :, :, None] != bkv_buckets[:, :, None, :]
-            dots = dots - 1e7 * bucket_mask
+            dots[bucket_mask] = float('-inf')
 
         # Don't double-count query-key pairs across multiple rounds of hashing.
         # There are two possible strategies here. (1) The default is to count how
