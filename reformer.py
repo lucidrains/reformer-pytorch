@@ -16,7 +16,7 @@ def sort_key_val(t1, t2, dim=-1):
 
 def batched_index_select(values, indices):
     b = values.shape[0]
-    return values[torch.arange(0, b), indices.transpose(0, 1)].transpose(0, 1)
+    return values[torch.arange(b), indices.transpose(0, 1)].transpose(0, 1)
 
 def cache_fn(f):
     cache = None
@@ -65,7 +65,8 @@ class LSHAttention(nn.Module):
                   allow_duplicate_attention = False,
                   attend_across_buckets = False,
                   rehash_each_round = True,
-                  drop_for_hash_rate = 0.0):
+                  drop_for_hash_rate = 0.0,
+                  random_rotations_per_head = False):
         super().__init__()
         if dropout >= 1.0:
             raise ValueError('Dropout rates must be lower than 1.')
@@ -84,10 +85,7 @@ class LSHAttention(nn.Module):
         self._allow_duplicate_attention = allow_duplicate_attention
         self._attend_across_buckets = attend_across_buckets
         self._rehash_each_round = rehash_each_round
-
-    def _sample_rotation(self, shape, vecs):
-        device = vecs.device
-        return torch.randn(shape, device=device)
+        self._random_rotations_per_head = random_rotations_per_head
 
     def hash_vectors(self, n_buckets, vecs):
         batch_size = vecs.shape[0]
@@ -101,14 +99,15 @@ class LSHAttention(nn.Module):
         rot_size = n_buckets
 
         rotations_shape = (
+            batch_size if self._random_rotations_per_head else 1,
             vecs.shape[-1],
             self.n_hashes if self._rehash_each_round else 1,
             rot_size // 2)
 
-        random_rotations = self._sample_rotation(rotations_shape, vecs)
+        random_rotations = torch.randn(rotations_shape, device=device).expand(batch_size, -1, -1, -1)
 
         dropped_vecs = self.dropout_for_hash(vecs)
-        rotated_vecs = torch.einsum('btf,fhi->bhti', dropped_vecs, random_rotations)
+        rotated_vecs = torch.einsum('btf,bfhi->bhti', dropped_vecs, random_rotations)
 
         if self._rehash_each_round:
             rotated_vecs = torch.cat([rotated_vecs, -rotated_vecs], dim=-1)
@@ -122,7 +121,7 @@ class LSHAttention(nn.Module):
             rotated_vecs = torch.cat([rotated_vecs, -rotated_vecs], dim=-1)
             # In this configuration, we map each item to the top self.n_hashes buckets
             rotated_vecs = torch.squeeze(rotated_vecs, 0)
-            bucket_range = torch.arange(0, rotated_vecs.shape[-1], device=device)
+            bucket_range = torch.arange(rotated_vecs.shape[-1], device=device)
             bucket_range = torch.reshape(bucket_range, (1, -1))
             bucket_range = bucket_range.expand_as(rotated_vecs.shape)
 
@@ -145,7 +144,7 @@ class LSHAttention(nn.Module):
         # We use the same vector as both a query and a key.
         assert int(buckets.shape[1]) == self.n_hashes * seqlen
 
-        ticker = torch.arange(0, self.n_hashes * seqlen, device=device).unsqueeze(0)
+        ticker = torch.arange(self.n_hashes * seqlen, device=device).unsqueeze(0)
         buckets_and_t = seqlen * buckets + (ticker % seqlen)
         buckets_and_t = buckets_and_t.detach()
 
@@ -257,7 +256,7 @@ class LSHAttention(nn.Module):
         return out
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, **kwargs):
+    def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, random_rotations_per_head = False, **kwargs):
         super().__init__()
         self.heads = heads
 
@@ -266,7 +265,7 @@ class LSHSelfAttention(nn.Module):
         self.unify_heads = nn.Linear(emb * heads, emb)
 
         self.bucket_size = bucket_size
-        self.lsh_attn = LSHAttention(bucket_size=bucket_size, causal=causal, **kwargs)
+        self.lsh_attn = LSHAttention(bucket_size=bucket_size, causal=causal, random_rotations_per_head=random_rotations_per_head, **kwargs)
 
     def forward(self, x):
         b, t, e, h = *x.shape, self.heads
@@ -306,14 +305,14 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0.):
+    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
         self.token_emb = nn.Embedding(num_tokens, emb)
         self.pos_emb = nn.Embedding(max_seq_len, emb)
 
-        get_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout)
+        get_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head)
         get_ff = lambda: FeedForward(emb)
 
         if weight_tie:
@@ -334,7 +333,7 @@ class Reformer(nn.Module):
         self.to_logits = nn.Linear(emb, num_tokens)
 
     def forward(self, x):
-        x = self.token_emb(x) + self.pos_emb(torch.arange(0, x.shape[1], device=x.device))
+        x = self.token_emb(x) + self.pos_emb(torch.arange(x.shape[1], device=x.device))
         x = torch.cat([x, x], dim = -1)
         x = self.layers(x)
         x = torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
