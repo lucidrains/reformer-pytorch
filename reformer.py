@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Function
 from revtorch import ReversibleBlock, ReversibleSequence
 
 # helper fns
@@ -241,8 +242,22 @@ class LSHAttention(nn.Module):
         so = torch.reshape(bo, (batch_size, -1, bo.shape[-1]))
         slogits = torch.reshape(dots_logsumexp, (batch_size, -1,))
 
-        o = batched_index_select(so, undo_sort)
-        _, logits = sort_key_val(sticker, slogits, dim=-1)
+        class UnsortLogits(Function):
+            @staticmethod
+            def forward(ctx, so, slogits):
+                so = so.detach()
+                slogits = slogits.detach()
+                o = batched_index_select(so, undo_sort)
+                _, logits = sort_key_val(sticker, slogits, dim=-1)
+                return o, logits
+
+            @staticmethod
+            def backward(ctx, grad_x, grad_y):
+                so_grad = batched_index_select(grad_x, sticker)
+                _, slogits_grad = sort_key_val(buckets_and_t, grad_y, dim=-1)
+                return so_grad, slogits_grad
+
+        o, logits = UnsortLogits.apply(so, slogits)
 
         if self.n_hashes == 1:
             out = o
