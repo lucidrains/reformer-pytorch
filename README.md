@@ -41,7 +41,7 @@ x = torch.randint(0, 20000, (1, 1024)).long()
 y = model(x)
 ```
 
-LSH Attention
+Self Attention with LSH
 
 ```
 import torch
@@ -57,6 +57,24 @@ attn = LSHSelfAttention(
 
 x = torch.randn(10, 1024, 128)
 y = attn(x)
+```
+
+LSH (locality sensitive hashing) Attention
+
+```
+import torch
+from reformer Import LSHAttention
+
+attn = LSHAttention(
+    bucket_size = 64,
+    n_hashes = 16,
+    causal = True
+)
+
+qk = torch.randn(10, 1024, 128)
+v = torch.randn(10, 1024, 128)
+
+attn(qk, v)
 ```
 
 ## Todo
