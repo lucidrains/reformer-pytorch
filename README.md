@@ -7,13 +7,7 @@ It includes LSH attention, reversible network, and chunking. It has been validat
 ## Prerequisites
 
 ```
-torch
-revtorch
-```
-
-Run in virtual env
-```
-> pip install -r requirements.txt
+> pip install reformer_pytorch
 ```
 
 ## Usage
@@ -22,7 +16,7 @@ The full Reformer
 
 ```
 import torch
-from reformer import Reformer
+from reformer_pytorch import Reformer
 
 model = Reformer(
     emb = 512,
@@ -35,7 +29,7 @@ model = Reformer(
     bucket_size = 64,     # average size of qk per bucket, 64 was recommended in paper
     n_hashes = 8,         # should keep at 8 per paper
     ff_chunks = 200,      # number of chunks for feedforward layer
-    weight_tie = False    # tie parameters of each layer for no memory per additional depth
+    weight_tie = False,   # tie parameters of each layer for no memory per additional depth
     twin_attention = True # parallel net for reversibility is also LSH attention, not feedforward w/ gelu
 )
 
@@ -47,7 +41,7 @@ Self Attention with LSH
 
 ```
 import torch
-from reformer import LSHSelfAttention
+from reformer_pytorch import LSHSelfAttention
 
 attn = LSHSelfAttention(
     emb = 128,
@@ -65,7 +59,7 @@ LSH (locality sensitive hashing) Attention
 
 ```
 import torch
-from reformer Import LSHAttention
+from reformer_pytorch Import LSHAttention
 
 attn = LSHAttention(
     bucket_size = 64,
