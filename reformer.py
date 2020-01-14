@@ -31,12 +31,21 @@ def cache_fn(f):
 
 # helper classes
 
+class ScaleNorm(nn.Module):
+    def __init__(self, emb, eps=1e-5):
+        super(ScaleNorm, self).__init__()
+        self.g = nn.Parameter(torch.ones(1, requires_grad=True))
+        self.eps = eps
 
-class WithLayerNorm(nn.Module):
-    def __init__(self, emb, fn):
+    def forward(self, x):
+        n = torch.norm(x, dim=-1, keepdim=True).clamp(min=self.eps)
+        return x / n * self.g
+
+class WithNorm(nn.Module):
+    def __init__(self, norm_class, emb, fn):
         super().__init__()
         self.emb = emb
-        self.norm = nn.LayerNorm(emb)
+        self.norm = norm_class(emb)
         self.fn = fn
     def forward(self, x):
         x = self.norm(x)
@@ -321,7 +330,7 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False):
+    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
@@ -336,13 +345,14 @@ class Reformer(nn.Module):
             get_ff = cache_fn(get_ff)
 
         blocks = []
+        norm_type = ScaleNorm if use_scale_norm else nn.LayerNorm
 
         for _ in range(depth):
-            attn = WithLayerNorm(emb, get_attn())
-            parallel_net = WithLayerNorm(emb, get_attn() if twin_attention else get_ff())
+            attn = get_attn()
+            parallel_net = get_attn() if twin_attention else get_ff()
 
-            f = WithLayerNorm(emb, attn)
-            g = WithLayerNorm(emb, parallel_net)
+            f = WithNorm(norm_type, emb, attn)
+            g = WithNorm(norm_type, emb, parallel_net)
 
             if not twin_attention and ff_chunks > 1:
                 g = Chunk(ff_chunks, g, along_dim = -2)
