@@ -31,6 +31,7 @@ def cache_fn(f):
 
 # helper classes
 
+
 class WithLayerNorm(nn.Module):
     def __init__(self, emb, fn):
         super().__init__()
@@ -320,7 +321,7 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False):
+    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
@@ -337,11 +338,15 @@ class Reformer(nn.Module):
         blocks = []
 
         for _ in range(depth):
-            attn = get_attn()
-            ff_net = get_ff()
+            attn = WithLayerNorm(emb, get_attn())
+            parallel_net = WithLayerNorm(emb, get_attn() if twin_attention else get_ff())
 
             f = WithLayerNorm(emb, attn)
-            g = Chunk(ff_chunks, WithLayerNorm(emb, ff_net), along_dim = -2)
+            g = WithLayerNorm(emb, parallel_net)
+
+            if not twin_attention and ff_chunks > 1:
+                g = Chunk(ff_chunks, g, along_dim = -2)
+
             blocks.append(ReversibleBlock(f, g, split_along_dim=-1))
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks))
