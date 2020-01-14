@@ -1,5 +1,7 @@
 # Reformer, the Efficient Transformer, in Pytorch
 
+<img src="./lsh_attention.png" width="500">
+
 This is a Pytorch implementation of Reformer https://openreview.net/pdf?id=rkgNKkHtvB
 
 It includes LSH attention, reversible network, and chunking. It has been validated with a toy auto-regressive task.
