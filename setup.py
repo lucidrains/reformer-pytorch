@@ -4,7 +4,7 @@ setup(
   name = 'reformer_pytorch',
   packages = find_packages(),
   version = '0.1',
-  license='MIT',
+  license='GPLv3+',
   description = 'Reformer, the Efficient Transformer, Pytorch',
   author = 'Phil Wang',
   author_email = 'lucidrains@gmail.com',
