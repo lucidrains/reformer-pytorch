@@ -238,7 +238,7 @@ class LSHAttention(nn.Module):
             bq_locs = torch.reshape(bq_locs, b_locs.shape)
             bkv_locs = look_one_back(b_locs)
 
-            dup_counts = (bq_locs[:, :, :, None, :] == bkv_locs[:, :, None, :, :]).float().sum(dim=-1)
+            dup_counts = (bq_locs[:, :, :, None, :] == bkv_locs[:, :, None, :, :]).sum(dim=-1)
             dup_counts = dup_counts.detach()
             assert dup_counts.shape == dots.shape
             dots = dots - torch.log(dup_counts + 1e-9)
