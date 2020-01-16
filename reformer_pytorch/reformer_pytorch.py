@@ -33,7 +33,7 @@ def cache_fn(f):
 
 class ScaleNorm(nn.Module):
     def __init__(self, emb, eps=1e-5):
-        super(ScaleNorm, self).__init__()
+        super().__init__()
         self.g = nn.Parameter(torch.ones(1, requires_grad=True))
         self.eps = eps
 
