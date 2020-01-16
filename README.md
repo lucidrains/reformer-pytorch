@@ -8,15 +8,15 @@ It includes LSH attention, reversible network, and chunking. It has been validat
 
 ## Install
 
-```
-> pip install reformer_pytorch
+```bash
+pip install reformer_pytorch
 ```
 
 ## Usage
 
 The full Reformer
 
-```
+```python
 import torch
 from reformer_pytorch import Reformer
 
@@ -42,7 +42,7 @@ y = model(x)
 
 Self Attention with LSH
 
-```
+```python
 import torch
 from reformer_pytorch import LSHSelfAttention
 
@@ -60,7 +60,7 @@ y = attn(x)
 
 LSH (locality sensitive hashing) Attention
 
-```
+```python
 import torch
 from reformer_pytorch Import LSHAttention
 
