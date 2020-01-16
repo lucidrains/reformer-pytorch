@@ -315,16 +315,24 @@ class LSHSelfAttention(nn.Module):
 # simple full self attention for ablation
 
 class SelfAttention(nn.Module):
-    def __init__(self, emb, heads = 8):
+    def __init__(self, emb, heads = 8, causal = False):
         super().__init__()
         self.toqkv = nn.Linear(emb, emb * heads * 3)
         self.attn = nn.MultiheadAttention(emb * heads, heads)
         self.unify_heads = nn.Linear(emb * heads, emb)
+        self.causal = causal
 
     def forward(self, x):
+        b, t, e = x.shape
         qkv = self.toqkv(x).chunk(3, dim=-1)
         q, k, v = map(lambda x: x.transpose(0, 1), qkv)
-        output, _ = self.attn(q, k, v)
+
+        attn_mask = torch.zeros(t, t, device=x.device)
+        if self.causal:
+            causal_mask = torch.triu(torch.ones(t, t, device=x.device) == 1, 1)
+            attn_mask.masked_fill_(causal_mask == 1, float('-inf'))
+
+        output, _ = self.attn(q, k, v, attn_mask = attn_mask)
         return self.unify_heads(output.transpose(0, 1))
 
 # feedforward
@@ -352,7 +360,7 @@ class Reformer(nn.Module):
         self.token_emb = nn.Embedding(num_tokens, emb)
         self.pos_emb = nn.Embedding(max_seq_len, emb)
 
-        get_full_attn = lambda: SelfAttention(emb, heads)
+        get_full_attn = lambda: SelfAttention(emb, heads, causal = causal)
         get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head)
 
         get_attn = get_full_attn if use_full_attn else get_lsh_attn
