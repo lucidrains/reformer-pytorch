@@ -8,13 +8,17 @@ import torch.optim as optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 
+# constants
+
+NUM_BATCHES = int(1e5)
 BATCH_SIZE = 4
 GRADIENT_ACCUMULATE_EVERY = 4
-NUM_BATCHES = int(1e5)
-LR = 1e-4
+LEARNING_RATE = 1e-4
 VALIDATE_EVERY = 100
 
 SEQ_LEN = 1024
+
+# instantiate model
 
 model = Reformer(
     emb = 512,
@@ -31,6 +35,8 @@ model = Reformer(
 )
 
 model.cuda()
+
+# prepare enwik8 data
 
 with gzip.open('./data/enwik8.gz') as file:
     X = np.fromstring(file.read(int(95e6)), dtype=np.uint8)
@@ -53,7 +59,12 @@ class TextSamplerDataset(Dataset):
 
 train_loader = iter(DataLoader(TextSamplerDataset(data_train, SEQ_LEN), batch_size = BATCH_SIZE))
 val_loader = iter(DataLoader(TextSamplerDataset(data_val, SEQ_LEN), batch_size = BATCH_SIZE))
-optim = torch.optim.Adam(model.parameters(), lr=LR)
+
+# optimizer
+
+optim = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+# training
 
 def get_batch_loss(model, data):
     x, y = data
