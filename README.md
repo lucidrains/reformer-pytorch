@@ -73,7 +73,9 @@ attn = LSHAttention(
 qk = torch.randn(10, 1024, 128)
 v = torch.randn(10, 1024, 128)
 
-attn(qk, v)
+attn_out, buckets = attn(qk, v)
+
+# buckets will contain the bucket number (post-argmax) of each token of each batch
 ```
 
 ## Todo

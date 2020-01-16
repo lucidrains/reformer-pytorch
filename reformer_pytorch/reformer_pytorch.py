@@ -278,7 +278,7 @@ class LSHAttention(nn.Module):
             out = torch.sum(o * probs, dim=1)
 
         assert out.shape == v.shape
-        return out
+        return out, buckets
 
 class LSHSelfAttention(nn.Module):
     def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, random_rotations_per_head = False, **kwargs):
@@ -307,7 +307,7 @@ class LSHSelfAttention(nn.Module):
 
         qk = merge_heads(qk)
         v = merge_heads(v)
-        attn_out = self.lsh_attn(qk, v)
+        attn_out, _ = self.lsh_attn(qk, v)
         out = split_heads(attn_out).view(b, t, h * e)
 
         return self.unify_heads(out)
