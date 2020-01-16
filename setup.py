@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
   name = 'reformer_pytorch',
-  packages = find_packages(),
+  packages = find_packages(exclude=['example']),
   version = '0.5',
   license='GPLv3+',
   description = 'Reformer, the Efficient Transformer, Pytorch',
