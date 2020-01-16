@@ -32,7 +32,8 @@ model = Reformer(
     n_hashes = 8,         # should keep at 8 per paper
     ff_chunks = 200,      # number of chunks for feedforward layer
     weight_tie = False,   # tie parameters of each layer for no memory per additional depth
-    twin_attention = True # parallel net for reversibility is also LSH attention, not feedforward w/ gelu
+    twin_attention = True, # parallel net for reversibility is also LSH attention, not feedforward w/ gelu
+    use_full_attn = False  # use full self attention
 )
 
 x = torch.randint(0, 20000, (1, 1024)).long()

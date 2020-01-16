@@ -312,6 +312,21 @@ class LSHSelfAttention(nn.Module):
 
         return self.unify_heads(out)
 
+# simple full self attention for ablation
+
+class SelfAttention(nn.Module):
+    def __init__(self, emb, heads = 8):
+        super().__init__()
+        self.toqkv = nn.Linear(emb, emb * heads * 3)
+        self.attn = nn.MultiheadAttention(emb * heads, heads)
+        self.unify_heads = nn.Linear(emb * heads, emb)
+
+    def forward(self, x):
+        qkv = self.toqkv(x).chunk(3, dim=-1)
+        q, k, v = map(lambda x: x.transpose(0, 1), qkv)
+        output, _ = self.attn(q, k, v)
+        return self.unify_heads(output.transpose(0, 1))
+
 # feedforward
 
 class FeedForward(nn.Module):
@@ -330,14 +345,17 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False):
+    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
         self.token_emb = nn.Embedding(num_tokens, emb)
         self.pos_emb = nn.Embedding(max_seq_len, emb)
 
-        get_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head)
+        get_full_attn = lambda: SelfAttention(emb, heads)
+        get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head)
+
+        get_attn = get_full_attn if use_full_attn else get_lsh_attn
         get_ff = lambda: FeedForward(emb)
 
         if weight_tie:
