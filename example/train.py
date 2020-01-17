@@ -40,7 +40,7 @@ model.cuda()
 
 with gzip.open('./data/enwik8.gz') as file:
     X = np.fromstring(file.read(int(95e6)), dtype=np.uint8)
-    trX, vaX = np.split(X, [int(90e6), int(5e6)])
+    trX, vaX = np.split(X, [int(90e6)])
     data_train, data_val = torch.from_numpy(trX), torch.from_numpy(vaX)
 
 class TextSamplerDataset(Dataset):
