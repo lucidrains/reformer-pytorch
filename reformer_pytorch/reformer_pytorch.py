@@ -283,11 +283,14 @@ class LSHAttention(nn.Module):
 class LSHSelfAttention(nn.Module):
     def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, random_rotations_per_head = False, **kwargs):
         super().__init__()
+        assert emb % heads == 0, 'dimensions must be divisible by number of heads'
+
+        self.emb = emb
         self.heads = heads
 
-        self.toqk = nn.Linear(emb, emb * heads)
-        self.tov = nn.Linear(emb, emb * heads)
-        self.unify_heads = nn.Linear(emb * heads, emb)
+        self.toqk = nn.Linear(emb, emb, bias = False)
+        self.tov = nn.Linear(emb, emb, bias = False)
+        self.to_out = nn.Linear(emb, emb)
 
         self.bucket_size = bucket_size
         self.lsh_attn = LSHAttention(bucket_size=bucket_size, causal=causal, random_rotations_per_head=random_rotations_per_head, **kwargs)
@@ -300,40 +303,39 @@ class LSHSelfAttention(nn.Module):
         v = self.tov(x)
 
         def merge_heads(v):
-            return v.view(b, t, h, e).transpose(1, 2).reshape(b * h, t, e)
+            return v.view(b, t, h, -1).transpose(1, 2).reshape(b * h, t, -1)
 
         def split_heads(v):
-            return v.view(b, h, t, e).transpose(1, 2).contiguous()
+            return v.view(b, h, t, -1).transpose(1, 2).contiguous()
 
         qk = merge_heads(qk)
         v = merge_heads(v)
         attn_out, _ = self.lsh_attn(qk, v)
-        out = split_heads(attn_out).view(b, t, h * e)
+        out = split_heads(attn_out).view(b, t, e)
 
-        return self.unify_heads(out)
+        return self.to_out(out)
 
 # simple full self attention for ablation
 
 class SelfAttention(nn.Module):
     def __init__(self, emb, heads = 8, causal = False):
         super().__init__()
-        self.toqkv = nn.Linear(emb, emb * heads * 3)
-        self.attn = nn.MultiheadAttention(emb * heads, heads)
-        self.unify_heads = nn.Linear(emb * heads, emb)
+        assert emb % heads == 0, 'dimensions must be divisible by number of heads'
+        self.attn = nn.MultiheadAttention(emb, heads)
+        self.to_out = nn.Linear(emb, emb)
         self.causal = causal
 
     def forward(self, x):
         b, t, e = x.shape
-        qkv = self.toqkv(x).chunk(3, dim=-1)
-        q, k, v = map(lambda x: x.transpose(0, 1), qkv)
+        x = x.transpose(0, 1)
 
         attn_mask = torch.zeros(t, t, device=x.device)
         if self.causal:
             causal_mask = torch.triu(torch.ones(t, t, device=x.device) == 1, 1)
             attn_mask.masked_fill_(causal_mask == 1, float('-inf'))
 
-        output, _ = self.attn(q, k, v, attn_mask = attn_mask)
-        return self.unify_heads(output.transpose(0, 1))
+        output, _ = self.attn(x, x, x, attn_mask = attn_mask)
+        return self.to_out(output.transpose(0, 1))
 
 # feedforward
 
