@@ -19,6 +19,12 @@ def batched_index_select(values, indices):
     b = values.shape[0]
     return values[torch.arange(b), indices.transpose(0, 1)].transpose(0, 1)
 
+def chunked_sum(tensor, chunks = 1):
+    *orig_size, last_dim = tensor.shape
+    tensor = tensor.reshape(-1, last_dim)
+    summed_tensors = [c.sum(dim=-1) for c in tensor.chunk(chunks, dim=0)]
+    return torch.cat(summed_tensors, dim=0).reshape(orig_size)
+
 def cache_fn(f):
     cache = None
     def cached_fn(*args, **kwargs):
@@ -238,7 +244,9 @@ class LSHAttention(nn.Module):
             bq_locs = torch.reshape(bq_locs, b_locs.shape)
             bkv_locs = look_one_back(b_locs)
 
-            dup_counts = (bq_locs[:, :, :, None, :] == bkv_locs[:, :, None, :, :]).sum(dim=-1)
+            dup_counts = (bq_locs[:, :, :, None, :] == bkv_locs[:, :, None, :, :])
+            # for memory considerations, chunk summation of last dimension for counting duplicates
+            dup_counts = chunked_sum(dup_counts, chunks=(self.n_hashes * batch_size))
             dup_counts = dup_counts.detach()
             assert dup_counts.shape == dots.shape
             dots = dots - torch.log(dup_counts + 1e-9)
