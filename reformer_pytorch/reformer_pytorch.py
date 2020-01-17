@@ -16,10 +16,15 @@ def sort_key_val(t1, t2, dim=-1):
     return values, t2.gather(dim, indices)
 
 def batched_index_select(values, indices):
-    b = values.shape[0]
-    return values[torch.arange(b), indices.transpose(0, 1)].transpose(0, 1)
+    last_dim = values.shape[-1]
+    return values.gather(1, indices[:, :, None].expand(-1, -1, last_dim))
 
-def chunked_sum(tensor, chunks = 1):
+def process_inputs_chunk(fn, *args, chunks=1):
+    chunked_inputs = list(map(lambda x: x.chunk(chunks, dim=0), args))
+    outputs = [fn(*input_pair) for input_pair in zip(*chunked_inputs)]
+    return outputs
+
+def chunked_sum(tensor, chunks=1):
     *orig_size, last_dim = tensor.shape
     tensor = tensor.reshape(-1, last_dim)
     summed_tensors = [c.sum(dim=-1) for c in tensor.chunk(chunks, dim=0)]
@@ -289,12 +294,13 @@ class LSHAttention(nn.Module):
         return out, buckets
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, random_rotations_per_head = False, **kwargs):
+    def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, **kwargs):
         super().__init__()
         assert emb % heads == 0, 'dimensions must be divisible by number of heads'
 
         self.emb = emb
         self.heads = heads
+        self.attn_chunks = heads if attn_chunks is None else attn_chunks
 
         self.toqk = nn.Linear(emb, emb, bias = False)
         self.tov = nn.Linear(emb, emb, bias = False)
@@ -318,7 +324,10 @@ class LSHSelfAttention(nn.Module):
 
         qk = merge_heads(qk)
         v = merge_heads(v)
-        attn_out, _ = self.lsh_attn(qk, v)
+
+        outputs = process_inputs_chunk(self.lsh_attn, qk, v, chunks=self.attn_chunks)
+        attn_out = torch.cat([output for (output, _) in outputs], dim=0)
+
         out = split_heads(attn_out).view(b, t, e)
 
         return self.to_out(out)
@@ -363,7 +372,7 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
+    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
@@ -371,7 +380,7 @@ class Reformer(nn.Module):
         self.pos_emb = nn.Embedding(max_seq_len, emb)
 
         get_full_attn = lambda: SelfAttention(emb, heads, causal = causal)
-        get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head)
+        get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, random_rotations_per_head = random_rotations_per_head)
 
         get_attn = get_full_attn if use_full_attn else get_lsh_attn
         get_ff = lambda: FeedForward(emb)
