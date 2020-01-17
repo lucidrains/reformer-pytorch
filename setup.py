@@ -3,13 +3,13 @@ from setuptools import setup, find_packages
 setup(
   name = 'reformer_pytorch',
   packages = find_packages(exclude=['example']),
-  version = '0.6',
+  version = '0.6.2',
   license='GPLv3+',
   description = 'Reformer, the Efficient Transformer, Pytorch',
   author = 'Phil Wang',
   author_email = 'lucidrains@gmail.com',
   url = 'https://github.com/lucidrains/reformer-pytorch',
-  download_url = 'https://github.com/lucidrains/reformer-pytorch/archive/v_06.tar.gz',
+  download_url = 'https://github.com/lucidrains/reformer-pytorch/archive/v_062.tar.gz',
   keywords = ['transformers', 'attention', 'artificial intelligence'],
   install_requires=[
       'revtorch',

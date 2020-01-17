@@ -213,16 +213,16 @@ class LSHAttention(nn.Module):
         # Causal masking
         if self.causal:
             mask = bq_t[:, :, :, None] < bkv_t[:, :, None, :]
-            dots[mask] = float('-inf')
+            dots.masked_fill_(mask, float('-inf'))
 
         # Mask out attention to self except when no other targets are available.
         self_mask = bq_t[:, :, :, None] == bkv_t[:, :, None, :]
-        dots[self_mask] = - 1e5
+        dots.masked_fill_(self_mask, - 1e5)
 
         # Mask out attention to other hash buckets.
         if not self._attend_across_buckets:
             bucket_mask = bq_buckets[:, :, :, None] != bkv_buckets[:, :, None, :]
-            dots[bucket_mask] = float('-inf')
+            dots.masked_fill_(bucket_mask, float('-inf'))
 
         # Don't double-count query-key pairs across multiple rounds of hashing.
         # There are two possible strategies here. (1) The default is to count how
