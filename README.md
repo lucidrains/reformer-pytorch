@@ -17,13 +17,15 @@ pip install reformer_pytorch
 The full Reformer
 
 ```python
+# should fit in ~ 5gb - 8k tokens
+
 import torch
 from reformer_pytorch import Reformer
 
 model = Reformer(
     emb = 512,
     depth = 12,
-    max_seq_len = 1024,
+    max_seq_len = 8192,
     num_tokens= 20000,
     heads = 8,
     lsh_dropout = 0.1,
@@ -32,12 +34,11 @@ model = Reformer(
     n_hashes = 8,         # should keep at 8 per paper
     ff_chunks = 200,      # number of chunks for feedforward layer
     weight_tie = False,   # tie parameters of each layer for no memory per additional depth
-    twin_attention = True, # parallel net for reversibility is also LSH attention, not feedforward w/ gelu
-    attn_chunks = 8,       # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
-    use_full_attn = False  # use full self attention, for testing
-)
+    attn_chunks = 8,        # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
+    use_full_attn = False   # use full self attention, for comparison
+).cuda()
 
-x = torch.randint(0, 20000, (1, 1024)).long()
+x = torch.randint(0, 20000, (1, 8192)).long().cuda()
 y = model(x)
 ```
 
