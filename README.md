@@ -64,7 +64,7 @@ LSH (locality sensitive hashing) Attention
 
 ```python
 import torch
-from reformer_pytorch Import LSHAttention
+from reformer_pytorch import LSHAttention
 
 attn = LSHAttention(
     bucket_size = 64,
