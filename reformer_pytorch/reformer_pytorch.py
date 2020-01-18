@@ -173,6 +173,7 @@ class LSHAttention(nn.Module):
         # Hash-based sort ("s" at the start of variable names means "sorted")
         sbuckets_and_t, sticker = sort_key_val(buckets_and_t, ticker, dim=-1)
         _, undo_sort = sort_key_val(sticker, ticker, dim=-1)
+        del ticker
 
         sbuckets_and_t = sbuckets_and_t.detach()
         sticker = sticker.detach()
@@ -214,15 +215,18 @@ class LSHAttention(nn.Module):
         if self.causal:
             mask = bq_t[:, :, :, None] < bkv_t[:, :, None, :]
             dots.masked_fill_(mask, float('-inf'))
+            del mask
 
         # Mask out attention to self except when no other targets are available.
         self_mask = bq_t[:, :, :, None] == bkv_t[:, :, None, :]
         dots.masked_fill_(self_mask, - 1e5)
+        del self_mask
 
         # Mask out attention to other hash buckets.
         if not self._attend_across_buckets:
             bucket_mask = bq_buckets[:, :, :, None] != bkv_buckets[:, :, None, :]
             dots.masked_fill_(bucket_mask, float('-inf'))
+            del bucket_mask
 
         # Don't double-count query-key pairs across multiple rounds of hashing.
         # There are two possible strategies here. (1) The default is to count how
@@ -255,6 +259,7 @@ class LSHAttention(nn.Module):
             dup_counts = dup_counts.detach()
             assert dup_counts.shape == dots.shape
             dots = dots - torch.log(dup_counts + 1e-9)
+            del dup_counts
 
         # Softmax.
         dots_logsumexp = torch.logsumexp(dots, dim=-1, keepdim=True)
