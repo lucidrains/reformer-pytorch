@@ -4,7 +4,9 @@
 
 This is a Pytorch implementation of Reformer https://openreview.net/pdf?id=rkgNKkHtvB
 
-It includes LSH attention, reversible network, and chunking. It has been validated with a toy auto-regressive task.
+It includes LSH attention, reversible network, and chunking. It has been validated with an auto-regressive task (enwik8).
+
+[![Test In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1am1DRl80Kd3o6n_4u3MomPzYS0NfdHAC)] 65k tokens forward backward test in Colab
 
 ## Install
 
@@ -45,7 +47,7 @@ y = model(x) # (1, 8192, 20000)
 The Reformer (just a stack of reversible LSH attention)
 
 ```python
-# should fit in ~ 5gb - 8k tokens
+# should fit in ~ 5gb - 8k embeddings
 
 import torch
 from reformer_pytorch import Reformer
@@ -78,7 +80,7 @@ attn = LSHSelfAttention(
 )
 
 x = torch.randn(10, 1024, 128)
-y = attn(x)
+y = attn(x) # (10, 1024, 128)
 ```
 
 LSH (locality sensitive hashing) Attention
@@ -96,8 +98,7 @@ attn = LSHAttention(
 qk = torch.randn(10, 1024, 128)
 v = torch.randn(10, 1024, 128)
 
-attn_out, buckets = attn(qk, v)
-
+attn_out, buckets = attn(qk, v) # (10, 1024, 128)
 # buckets will contain the bucket number (post-argmax) of each token of each batch
 ```
 

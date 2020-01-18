@@ -1,1 +1,1 @@
-from reformer_pytorch.reformer_pytorch import LSHAttention, LSHSelfAttention, Reformer
+from reformer_pytorch.reformer_pytorch import LSHAttention, LSHSelfAttention, Reformer, ReformerLM
