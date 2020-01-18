@@ -1,4 +1,4 @@
-from reformer_pytorch import Reformer
+from reformer_pytorch import ReformerLM
 
 import tqdm
 import gzip
@@ -20,7 +20,7 @@ SEQ_LEN = 1024
 
 # instantiate model
 
-model = Reformer(
+model = ReformerLM(
     emb = 512,
     depth = 6,
     max_seq_len = SEQ_LEN,
