@@ -377,12 +377,10 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, num_tokens = 10000, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
+    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
-        self.token_emb = nn.Embedding(num_tokens, emb)
-        self.pos_emb = nn.Embedding(max_seq_len, emb)
 
         get_full_attn = lambda: SelfAttention(emb, heads, causal = causal)
         get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, random_rotations_per_head = random_rotations_per_head)
@@ -410,11 +408,21 @@ class Reformer(nn.Module):
             blocks.append(ReversibleBlock(f, g, split_along_dim=-1))
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks))
+
+    def forward(self, x):
+        x = torch.cat([x, x], dim = -1)
+        x = self.layers(x)
+        return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
+
+class ReformerLM(nn.Module):
+    def __init__(self, num_tokens, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
+        super().__init__()
+        self.token_emb = nn.Embedding(num_tokens, emb)
+        self.pos_emb = nn.Embedding(max_seq_len, emb)
+        self.reformer = Reformer(emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False)
         self.to_logits = nn.Linear(emb, num_tokens)
 
     def forward(self, x):
         x = self.token_emb(x) + self.pos_emb(torch.arange(x.shape[1], device=x.device))
-        x = torch.cat([x, x], dim = -1)
-        x = self.layers(x)
-        x = torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
+        x = self.reformer(x)
         return self.to_logits(x)
