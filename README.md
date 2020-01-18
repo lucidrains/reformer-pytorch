@@ -4,7 +4,7 @@
 
 This is a Pytorch implementation of Reformer https://openreview.net/pdf?id=rkgNKkHtvB
 
-It includes LSH attention, reversible network, and chunking. It has been validated with a toy auto-regressive task.
+It includes LSH attention, reversible network, and chunking. It has been validated with an auto-regressive task (enwik8).
 
 ## Install
 
