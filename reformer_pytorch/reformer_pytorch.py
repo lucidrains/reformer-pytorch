@@ -419,7 +419,7 @@ class ReformerLM(nn.Module):
         super().__init__()
         self.token_emb = nn.Embedding(num_tokens, emb)
         self.pos_emb = nn.Embedding(max_seq_len, emb)
-        self.reformer = Reformer(emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False)
+        self.reformer = Reformer(emb, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn)
         self.to_logits = nn.Linear(emb, num_tokens)
 
     def forward(self, x):
