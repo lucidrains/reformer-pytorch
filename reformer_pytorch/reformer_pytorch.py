@@ -84,8 +84,8 @@ class LSHAttention(nn.Module):
                   bucket_size = 64,
                   n_hashes = 8,
                   causal = False,
-                  allow_duplicate_attention = False,
-                  attend_across_buckets = False,
+                  allow_duplicate_attention = True,
+                  attend_across_buckets = True,
                   rehash_each_round = True,
                   drop_for_hash_rate = 0.0,
                   random_rotations_per_head = False):
@@ -299,7 +299,7 @@ class LSHAttention(nn.Module):
         return out, buckets
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, **kwargs):
+    def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, **kwargs):
         super().__init__()
         assert emb % heads == 0, 'dimensions must be divisible by number of heads'
 
@@ -312,7 +312,7 @@ class LSHSelfAttention(nn.Module):
         self.to_out = nn.Linear(emb, emb)
 
         self.bucket_size = bucket_size
-        self.lsh_attn = LSHAttention(bucket_size=bucket_size, causal=causal, random_rotations_per_head=random_rotations_per_head, **kwargs)
+        self.lsh_attn = LSHAttention(bucket_size=bucket_size, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, **kwargs)
 
     def forward(self, x):
         b, t, e, h = *x.shape, self.heads
@@ -377,13 +377,13 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
+    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
 
         get_full_attn = lambda: SelfAttention(emb, heads, causal = causal)
-        get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, random_rotations_per_head = random_rotations_per_head)
+        get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head)
 
         get_attn = get_full_attn if use_full_attn else get_lsh_attn
         get_ff = lambda: FeedForward(emb)
