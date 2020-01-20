@@ -18,6 +18,13 @@ VALIDATE_EVERY = 100
 
 SEQ_LEN = 4096
 
+# helpers
+
+def cycle(loader):
+    while True:
+        for data in loader:
+            yield data
+
 # instantiate model
 
 model = ReformerLM(
@@ -58,8 +65,8 @@ class TextSamplerDataset(Dataset):
     def __len__(self):
         return self.data.size(0) // self.seq_len
 
-train_loader = iter(DataLoader(TextSamplerDataset(data_train, SEQ_LEN), batch_size = BATCH_SIZE))
-val_loader = iter(DataLoader(TextSamplerDataset(data_val, SEQ_LEN), batch_size = BATCH_SIZE))
+train_loader = cycle(DataLoader(TextSamplerDataset(data_train, SEQ_LEN), batch_size = BATCH_SIZE))
+val_loader = cycle(DataLoader(TextSamplerDataset(data_val, SEQ_LEN), batch_size = BATCH_SIZE))
 
 # optimizer
 
