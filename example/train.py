@@ -16,7 +16,7 @@ GRADIENT_ACCUMULATE_EVERY = 4
 LEARNING_RATE = 1e-4
 VALIDATE_EVERY = 100
 
-SEQ_LEN = 1024
+SEQ_LEN = 4096
 
 # instantiate model
 
@@ -27,11 +27,12 @@ model = ReformerLM(
     num_tokens = 256,
     heads = 8,
     bucket_size = 64,
-    n_hashes = 8,
+    n_hashes = 4,
     ff_chunks = 10,
     lsh_dropout = 0.1,
     weight_tie = True,
-    causal = True
+    causal = True,
+    use_full_attn = False # set this to true for comparison with full attention
 )
 
 model.cuda()
@@ -79,7 +80,7 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval=10.):
         loss.backward()
 
     print(f'training loss: {loss.item()}')
-    torch.nn.utils.clip_grad_norm(model.parameters(), 0.5)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
     optim.step()
     optim.zero_grad()
 
