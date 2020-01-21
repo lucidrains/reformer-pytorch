@@ -119,7 +119,7 @@ class LSHAttention(nn.Module):
             self.n_hashes = 1
             self.num_clusters = max_seq_len // bucket_size
             self.means = nn.Parameter(torch.zeros(heads, self.num_clusters, emb // heads).normal_(0, 1 / emb))
-            self.means = nn.Parameter(F.normalize(self.means, p=2, dim=-1))
+            self.means = nn.Parameter(F.normalize(self.means, p=2, dim=-1), requires_grad=False)
 
     def hash_vectors(self, n_buckets, vecs):
         batch_size = vecs.shape[0]
@@ -176,17 +176,19 @@ class LSHAttention(nn.Module):
 
         buckets = None
 
+        norm_qk = F.normalize(qk, p=2, dim=-1)
+
         if not self._learned_k_means:
             buckets = self.hash_vectors(n_buckets, qk.reshape(batch_size * heads, seqlen, -1))
         else:
             assert seqlen == self._max_seq_len, 'sequence length is fixed for learned k means'
-            rotated_vecs = torch.einsum('bhkd,hcd->bhkc', qk, self.means)
+            rotated_vecs = torch.einsum('bhkd,hcd->bhkc', norm_qk, self.means)
             buckets = torch.argmax(rotated_vecs, dim=-1)
 
         if self._learned_k_means and self.training:
             one_hot = F.one_hot(buckets, num_classes = self.num_clusters).float()
-            pre_means = torch.einsum('bhkd,bhkc->bhkcd', qk, one_hot).transpose(0,1).contiguous().view(heads, -1, self.num_clusters, dim).sum(1)
-            self.means = nn.Parameter(F.normalize(pre_means, p=2, dim=-1))
+            pre_means = torch.einsum('bhkd,bhkc->bhkcd', norm_qk, one_hot).transpose(0,1).contiguous().view(heads, -1, self.num_clusters, dim).sum(1)
+            self.means = nn.Parameter(F.normalize(pre_means, p=2, dim=-1), requires_grad=False)
 
         buckets = buckets.reshape(batch_size * heads, -1)
         qk = qk.reshape(batch_size * heads, seqlen, -1)
