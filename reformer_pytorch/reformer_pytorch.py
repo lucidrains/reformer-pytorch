@@ -80,6 +80,9 @@ class Chunk(nn.Module):
 
 class LSHAttention(nn.Module):
     def __init__( self,
+                  emb,
+                  heads,
+                  max_seq_len,
                   dropout = 0.,
                   bucket_size = 64,
                   n_hashes = 8,
@@ -88,7 +91,8 @@ class LSHAttention(nn.Module):
                   attend_across_buckets = True,
                   rehash_each_round = True,
                   drop_for_hash_rate = 0.0,
-                  random_rotations_per_head = False):
+                  random_rotations_per_head = False,
+                  learned_k_means = False):
         super().__init__()
         if dropout >= 1.0:
             raise ValueError('Dropout rates must be lower than 1.')
@@ -108,6 +112,14 @@ class LSHAttention(nn.Module):
         self._attend_across_buckets = attend_across_buckets
         self._rehash_each_round = rehash_each_round
         self._random_rotations_per_head = random_rotations_per_head
+        self._learned_k_means = learned_k_means
+        self._max_seq_len = max_seq_len
+
+        if learned_k_means:
+            self.n_hashes = 1
+            self.num_clusters = max_seq_len // bucket_size
+            self.means = nn.Parameter(torch.zeros(heads, self.num_clusters, emb // heads).normal_(0, 1 / emb))
+            self.means = nn.Parameter(F.normalize(self.means, p=2, dim=-1))
 
     def hash_vectors(self, n_buckets, vecs):
         batch_size = vecs.shape[0]
@@ -156,15 +168,33 @@ class LSHAttention(nn.Module):
         return buckets
 
     def forward(self, qk, v):
-        batch_size, seqlen, _ = qk.shape
+        batch_size, heads, seqlen, dim = qk.shape
         device = qk.device
 
         n_buckets = seqlen // self.bucket_size
         n_bins = n_buckets
 
-        buckets = self.hash_vectors(n_buckets, qk)
+        buckets = None
+
+        if not self._learned_k_means:
+            buckets = self.hash_vectors(n_buckets, qk.reshape(batch_size * heads, seqlen, -1))
+        else:
+            assert seqlen == self._max_seq_len, 'sequence length is fixed for learned k means'
+            rotated_vecs = torch.einsum('bhkd,hcd->bhkc', qk, self.means)
+            buckets = torch.argmax(rotated_vecs, dim=-1)
+
+        if self._learned_k_means and self.training:
+            one_hot = F.one_hot(buckets, num_classes = self.num_clusters).float()
+            pre_means = torch.einsum('bhkd,bhkc->bhkcd', qk, one_hot).transpose(0,1).contiguous().view(heads, -1, self.num_clusters, dim).sum(1)
+            self.means = nn.Parameter(F.normalize(pre_means, p=2, dim=-1))
+
+        buckets = buckets.reshape(batch_size * heads, -1)
+        qk = qk.reshape(batch_size * heads, seqlen, -1)
+        v = qk.reshape(batch_size * heads, seqlen, -1)
+
         # We use the same vector as both a query and a key.
         assert int(buckets.shape[1]) == self.n_hashes * seqlen
+        batch_size, seqlen, _ = qk.shape
 
         ticker = torch.arange(self.n_hashes * seqlen, device=device).unsqueeze(0)
         buckets_and_t = seqlen * buckets + (ticker % seqlen)
@@ -299,7 +329,7 @@ class LSHAttention(nn.Module):
         return out, buckets
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, emb, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, **kwargs):
+    def __init__(self, emb, heads, seq_len, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, learned_k_means = False, **kwargs):
         super().__init__()
         assert emb % heads == 0, 'dimensions must be divisible by number of heads'
 
@@ -312,7 +342,10 @@ class LSHSelfAttention(nn.Module):
         self.to_out = nn.Linear(emb, emb)
 
         self.bucket_size = bucket_size
-        self.lsh_attn = LSHAttention(bucket_size=bucket_size, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, **kwargs)
+        self.lsh_attn = LSHAttention(emb, heads, seq_len, bucket_size=bucket_size, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, learned_k_means = learned_k_means, **kwargs)
+
+        if learned_k_means:
+            self.attn_chunks = 1
 
     def forward(self, x):
         b, t, e, h = *x.shape, self.heads
@@ -322,7 +355,7 @@ class LSHSelfAttention(nn.Module):
         v = self.tov(x)
 
         def merge_heads(v):
-            return v.view(b, t, h, -1).transpose(1, 2).reshape(b * h, t, -1)
+            return v.view(b, t, h, -1).transpose(1, 2).reshape(b, h, t, -1)
 
         def split_heads(v):
             return v.view(b, h, t, -1).transpose(1, 2).contiguous()
@@ -377,13 +410,13 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
+    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, learned_k_means = False):
         super().__init__()
         self.emb = emb
         self.depth = depth
 
         get_full_attn = lambda: SelfAttention(emb, heads, causal = causal)
-        get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head)
+        get_lsh_attn = lambda: LSHSelfAttention(emb, heads, max_seq_len, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, learned_k_means = learned_k_means)
 
         get_attn = get_full_attn if use_full_attn else get_lsh_attn
         get_ff = lambda: FeedForward(emb)
@@ -415,11 +448,11 @@ class Reformer(nn.Module):
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False):
+    def __init__(self, num_tokens, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, learned_k_means = False):
         super().__init__()
         self.token_emb = nn.Embedding(num_tokens, emb)
         self.pos_emb = nn.Embedding(max_seq_len, emb)
-        self.reformer = Reformer(emb, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn)
+        self.reformer = Reformer(emb, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, learned_k_means = learned_k_means)
         self.to_logits = nn.Linear(emb, num_tokens)
 
     def forward(self, x):
