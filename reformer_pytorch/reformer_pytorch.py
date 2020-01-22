@@ -6,10 +6,6 @@ from revtorch import ReversibleBlock, ReversibleSequence
 
 # helper fns
 
-def make_unit_length(x, epsilon=1e-6):
-    norm = x.norm(p=2, dim=-1, keepdim=True)
-    return x.div(norm + epsilon)
-
 def sort_key_val(t1, t2, dim=-1):
     values, indices = t1.sort(dim=dim)
     t2 = t2.expand_as(t1)
@@ -166,7 +162,7 @@ class LSHAttention(nn.Module):
         # We use the same vector as both a query and a key.
         assert int(buckets.shape[1]) == self.n_hashes * seqlen
 
-        ticker = torch.arange(self.n_hashes * seqlen, device=device).unsqueeze(0)
+        ticker = torch.arange(self.n_hashes * seqlen, device=device).unsqueeze(0).expand_as(buckets)
         buckets_and_t = seqlen * buckets + (ticker % seqlen)
         buckets_and_t = buckets_and_t.detach()
 
@@ -194,7 +190,7 @@ class LSHAttention(nn.Module):
         # attention softmax, but normalizing keys is needed so that similarity for
         # the purposes of attention correctly corresponds to hash locality.
         bq = bqk
-        bk = make_unit_length(bqk)
+        bk = F.normalize(bqk, p=2, dim=-1)
 
         # Allow each chunk to attend within itself, and also one chunk back. Chunk
         # boundaries might occur in the middle of a sequence of items from the
