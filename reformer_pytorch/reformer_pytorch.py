@@ -312,7 +312,7 @@ class LSHSelfAttention(nn.Module):
         self.to_out = nn.Linear(emb, emb)
 
         self.bucket_size = bucket_size
-        self.lsh_attn = LSHAttention(bucket_size=bucket_size, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, **kwargs)
+        self.lsh_attn = LSHAttention(bucket_size=bucket_size, n_hashes=n_hashes, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, **kwargs)
 
     def forward(self, x):
         b, t, e, h = *x.shape, self.heads
