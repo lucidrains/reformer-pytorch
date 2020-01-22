@@ -152,11 +152,10 @@ class LSHAttention(nn.Module):
         return buckets
 
     def forward(self, qk, v):
-        batch_size, seqlen, _ = qk.shape
+        batch_size, seqlen, dim = qk.shape
         device = qk.device
 
         n_buckets = seqlen // self.bucket_size
-        n_bins = n_buckets
 
         buckets = self.hash_vectors(n_buckets, qk)
         # We use the same vector as both a query and a key.
@@ -180,10 +179,11 @@ class LSHAttention(nn.Module):
         sv = batched_index_select(v, st)
 
         # Split off a "bin" axis so that attention only occurs within chunks.
-        bq_t = bkv_t = torch.reshape(st, (batch_size, self.n_hashes * n_bins, -1))
-        bqk = torch.reshape(sqk, (batch_size, self.n_hashes * n_bins, -1, sqk.shape[-1]))
-        bv = torch.reshape(sv, (batch_size, self.n_hashes * n_bins, -1, sv.shape[-1]))
-        bq_buckets = bkv_buckets = torch.reshape(sbuckets_and_t // seqlen, (batch_size, self.n_hashes * n_bins, -1))
+        chunk_size = self.n_hashes * n_buckets
+        bq_t = bkv_t = torch.reshape(st, (batch_size, chunk_size, -1))
+        bqk = torch.reshape(sqk, (batch_size, chunk_size, -1, dim))
+        bv = torch.reshape(sv, (batch_size, chunk_size, -1, dim))
+        bq_buckets = bkv_buckets = torch.reshape(sbuckets_and_t // seqlen, (batch_size, chunk_size, -1))
 
         # Hashing operates on unit-length vectors. Unnormalized query vectors are
         # fine because they effectively provide a learnable temperature for the
@@ -205,7 +205,7 @@ class LSHAttention(nn.Module):
         bkv_buckets = look_one_back(bkv_buckets)
 
         # Dot-product attention.
-        dots = torch.einsum('bhie,bhje->bhij', bq, bk) * (bq.shape[-1] ** -0.5)
+        dots = torch.einsum('bhie,bhje->bhij', bq, bk) * (dim ** -0.5)
 
         # Causal masking
         if self.causal:
@@ -231,17 +231,17 @@ class LSHAttention(nn.Module):
         # instead masks all but the first occurence of each query-key pair.
         if not self._allow_duplicate_attention:
             locs1 = undo_sort // bq_t.shape[-1]
-            locs2 = (locs1 + 1) % (self.n_hashes * n_bins)
+            locs2 = (locs1 + 1) % chunk_size
             if not self._attend_across_buckets:
-                locs1 = buckets * (self.n_hashes * n_bins) + locs1
-                locs2 = buckets * (self.n_hashes * n_bins) + locs2
+                locs1 = buckets * chunk_size + locs1
+                locs2 = buckets * chunk_size + locs2
             locs = torch.cat([
                 torch.reshape(locs1, (batch_size, self.n_hashes, seqlen)),
                 torch.reshape(locs2, (batch_size, self.n_hashes, seqlen)),
             ], 1).permute((0, 2, 1))
 
             slocs = batched_index_select(locs, st)
-            b_locs = torch.reshape(slocs, (batch_size, self.n_hashes * n_bins, -1, 2 * self.n_hashes))
+            b_locs = torch.reshape(slocs, (batch_size, chunk_size, -1, 2 * self.n_hashes))
 
             b_locs1 = b_locs[:, :, :, None, :self.n_hashes]
 
@@ -263,7 +263,7 @@ class LSHAttention(nn.Module):
         dots = self.dropout(dots)
 
         bo = torch.einsum('buij,buje->buie', dots, bv)
-        so = torch.reshape(bo, (batch_size, -1, bo.shape[-1]))
+        so = torch.reshape(bo, (batch_size, -1, dim))
         slogits = torch.reshape(dots_logsumexp, (batch_size, -1,))
 
         class UnsortLogits(Function):
@@ -286,7 +286,7 @@ class LSHAttention(nn.Module):
         if self.n_hashes == 1:
             out = o
         else:
-            o = torch.reshape(o, (batch_size, self.n_hashes, seqlen, o.shape[-1]))
+            o = torch.reshape(o, (batch_size, self.n_hashes, seqlen, dim))
             logits = torch.reshape(logits, (batch_size, self.n_hashes, seqlen, 1))
             probs = torch.exp(logits - torch.logsumexp(logits, dim=1, keepdims=True))
             out = torch.sum(o * probs, dim=1)
