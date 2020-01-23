@@ -37,7 +37,8 @@ model = ReformerLM(
     ff_chunks = 200,      # number of chunks for feedforward layer, make higher if there are memory issues
     weight_tie = False,   # tie parameters of each layer for no memory per additional depth
     attn_chunks = 8,        # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
-    use_full_attn = False   # use full self attention, for comparison
+    use_full_attn = False,  # use full self attention, for comparison
+    num_mem_kv = 128        # persistent learned memory key values, from all-attention paper
 ).cuda()
 
 x = torch.randint(0, 20000, (1, 8192)).long().cuda()
@@ -104,6 +105,33 @@ attn_out, buckets = attn(qk, v) # (10, 1024, 128)
 
 ## Todo
 
-1. Make it so Reformer can be used as decoder where queries only attend to fed key/values
+1. Make it so Reformer can be used as decoder where queries only attend to fed key/values (in progress)
 2. Recurrence like Transformer XL
-3. All-attention learned memory key values
+3. ~~All-attention learned memory key values~~
+
+## Citations
+```
+@inproceedings{
+    kitaev2020reformer,
+    title={Reformer: The Efficient Transformer},
+    author={Nikita Kitaev and Lukasz Kaiser and Anselm Levskaya},
+    booktitle={International Conference on Learning Representations},
+    year={2020},
+    url={https://openreview.net/forum?id=rkgNKkHtvB}
+}
+```
+
+```
+@article{DBLP:journals/corr/abs-1907-01470,
+  author    = {Sainbayar Sukhbaatar and
+               Edouard Grave and
+               Guillaume Lample and
+               Herv{\'{e}} J{\'{e}}gou and
+               Armand Joulin},
+  title     = {Augmenting Self-attention with Persistent Memory},
+  journal   = {CoRR},
+  volume    = {abs/1907.01470},
+  year      = {2019},
+  url       = {http://arxiv.org/abs/1907.01470}
+}
+```
