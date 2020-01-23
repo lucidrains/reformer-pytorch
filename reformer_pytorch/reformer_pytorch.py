@@ -416,7 +416,7 @@ class Reformer(nn.Module):
             if not twin_attention and ff_chunks > 1:
                 g = Chunk(ff_chunks, g, along_dim = -2)
 
-            blocks.append(ReversibleBlock(f, g, split_along_dim=-1))
+            blocks.append(ReversibleBlock(f, g, split_along_dim=-1, fix_random_seed=True))
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks))
 
