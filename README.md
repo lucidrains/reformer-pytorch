@@ -1,4 +1,5 @@
 ## Reformer, the Efficient Transformer, in Pytorch
+[![PyPI version](https://badge.fury.io/py/reformer-pytorch.svg)](https://badge.fury.io/py/reformer-pytorch)
 
 <img src="./lsh_attention.png" width="500">
 
