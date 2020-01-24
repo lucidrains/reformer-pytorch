@@ -37,8 +37,9 @@ model = ReformerLM(
     ff_chunks = 200,      # number of chunks for feedforward layer, make higher if there are memory issues
     weight_tie = False,   # tie parameters of each layer for no memory per additional depth
     attn_chunks = 8,        # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
-    use_full_attn = False,  # use full self attention, for comparison
-    num_mem_kv = 128        # persistent learned memory key values, from all-attention paper
+    num_mem_kv = 128,       # persistent learned memory key values, from all-attention paper
+    twin_attention = False, # both branches of the reversible network will be attention
+    use_full_attn = False   # use full self attention, for comparison
 ).cuda()
 
 x = torch.randint(0, 20000, (1, 8192)).long().cuda()
