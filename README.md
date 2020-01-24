@@ -104,9 +104,41 @@ attn_out, buckets = attn(qk, v) # (10, 1024, 128)
 # buckets will contain the bucket number (post-argmax) of each token of each batch
 ```
 
+A full Reformer encoder / decoder architecture example
+
+```python
+import torch
+from reformer_pytorch.reformer_pytorch import Reformer, ReformerLM
+
+DATA_LEN = 8192
+SEQ_LEN = 4096
+
+encoder = Reformer(
+    emb = 512,
+    depth = 12,
+    heads = 8,
+    max_seq_len = DATA_LEN
+)
+
+decoder = ReformerLM(
+    num_tokens = 20000,
+    emb = 512,
+    depth = 12,
+    heads = 8,
+    max_seq_len = SEQ_LEN,
+    causal = True
+)
+
+x = torch.randn(1, DATA_LEN, 512)
+y = torch.randint(0, 20000, (1, SEQ_LEN)).long()
+
+enc_keys = encoder(x)
+o = decoder(y, keys = enc_keys) # (1, 4096, 20000)
+```
+
 ## Todo
 
-1. Make it so Reformer can be used as decoder where queries only attend to fed key/values (in progress)
+1. ~~Make it so Reformer can be used as decoder where queries only attend to fed key/values~~
 2. Recurrence like Transformer XL
 3. ~~All-attention learned memory key values~~
 

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
 from functools import partial
+from itertools import chain
 from revtorch import ReversibleBlock, ReversibleSequence
 
 # helper fns
@@ -37,6 +38,9 @@ def cache_fn(f):
         return cache
     return cached_fn
 
+def default(val, default_val):
+    return default_val if val is None else val
+
 # helper classes
 
 class ScaleNorm(nn.Module):
@@ -69,6 +73,20 @@ class Chunk(nn.Module):
     def forward(self, x):
         chunks = x.chunk(self.chunks, dim = self.dim)
         return torch.cat([self.fn(c) for c in chunks], dim = self.dim)
+
+class SettableArgs(nn.Module):
+    def __init__(self, fn, *args, **kwargs):
+        super().__init__()
+        self.args = args
+        self.kwargs = kwargs
+        self.fn = fn
+
+    def set_args(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+    def forward(self, x):
+        return self.fn(x, *self.args, **self.kwargs)
 
 # LSH attention as described in https://openreview.net/pdf?id=rkgNKkHtvB
 # adapted from trax, stripped to what paper said needed to work
@@ -154,7 +172,7 @@ class LSHAttention(nn.Module):
 
     def forward(self, qk, v, query_len = None):
         batch_size, seqlen, dim = qk.shape
-        query_len = seqlen if query_len is None else query_len
+        query_len = default(query_len, seqlen)
         device = qk.device
 
         n_buckets = seqlen // self.bucket_size
@@ -306,7 +324,7 @@ class LSHSelfAttention(nn.Module):
 
         self.emb = emb
         self.heads = heads
-        self.attn_chunks = heads if attn_chunks is None else attn_chunks
+        self.attn_chunks = default(attn_chunks, heads)
 
         self.toqk = nn.Linear(emb, emb, bias = False)
         self.tov = nn.Linear(emb, emb, bias = False)
@@ -318,16 +336,22 @@ class LSHSelfAttention(nn.Module):
         self.num_mem_kv = num_mem_kv
         self.mem_kv = nn.Parameter(torch.randn(1, num_mem_kv, emb, requires_grad=True))
 
-    def forward(self, x):
+    def forward(self, x, keys = None):
+        device = x.device
         b, t, e, h, m = *x.shape, self.heads, self.num_mem_kv
-        assert t % self.bucket_size == 0, f'Sequence length needs to be divisible by target bucket size - {self.bucket_size}'
 
-        x = torch.cat((x, self.mem_kv.expand(b, m, e)), dim=1)
+        mem = self.mem_kv.expand(b, m, e)
+        keys = default(keys, torch.empty(b, 0, e, device=device))
+
+        kv_len = t + m + keys.shape[1]
+        assert kv_len % self.bucket_size == 0, f'Sequence length needs to be divisible by target bucket size - {self.bucket_size}'
+
+        x = torch.cat((x, mem, keys), dim=1)
         qk = self.toqk(x)
         v = self.tov(x)
 
         def merge_heads(v):
-            return v.view(b, t + m, h, -1).transpose(1, 2).reshape(b * h, t + m, -1)
+            return v.view(b, kv_len, h, -1).transpose(1, 2).reshape(b * h, kv_len, -1)
 
         def split_heads(v):
             return v.view(b, h, t, -1).transpose(1, 2).contiguous()
@@ -356,12 +380,19 @@ class SelfAttention(nn.Module):
         self.num_mem_kv = num_mem_kv
         self.mem_kv = nn.Parameter(torch.randn(num_mem_kv, 1, emb, requires_grad=True))
 
-    def forward(self, x):
+    def forward(self, x, keys = None):
+        device = x.device
         b, t, e, m = *x.shape, self.num_mem_kv
-        x = x.transpose(0, 1)
-        kv = torch.cat((x, self.mem_kv.expand(m, b, e)))
 
-        attn_shape = (t, t + m)
+        mem = self.mem_kv.expand(m, b, e)
+        keys = default(keys, torch.empty(b, 0, e, device=device))
+
+        x, keys = x.transpose(0, 1), keys.transpose(0, 1)
+
+        kv = torch.cat((x, mem, keys))
+
+        kv_len = t + m + keys.shape[0]
+        attn_shape = (t, kv_len)
         attn_mask = torch.zeros(*attn_shape, device=x.device)
         if self.causal:
             i, j = torch.triu_indices(t, t, 1)
@@ -388,13 +419,13 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, num_mem_kv = 0):
+    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, num_mem_kv = 0, keys = None):
         super().__init__()
         self.emb = emb
         self.depth = depth
 
-        get_full_attn = lambda: SelfAttention(emb, heads, causal = causal, num_mem_kv = num_mem_kv)
-        get_lsh_attn = lambda: LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv)
+        get_full_attn = lambda: SettableArgs(SelfAttention(emb, heads, causal = causal, num_mem_kv = num_mem_kv), keys = keys)
+        get_lsh_attn = lambda: SettableArgs(LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv), keys = keys)
 
         get_attn = get_full_attn if use_full_attn else get_lsh_attn
         get_ff = lambda: FeedForward(emb)
@@ -419,9 +450,16 @@ class Reformer(nn.Module):
             blocks.append(ReversibleBlock(f, g, split_along_dim=-1, fix_random_seed=True))
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks))
+        self.modules = list(chain(*[[m.f_block.fn, m.g_block.fn] for m in self.layers.reversible_blocks]))
 
-    def forward(self, x):
+    def set_reversible_args(self, *args, **kwargs):
+        for module in self.modules:
+            if isinstance(module, SettableArgs):
+                module.set_args(*args, **kwargs)
+
+    def forward(self, x, keys = None):
         x = torch.cat([x, x], dim = -1)
+        self.set_reversible_args(keys = keys)
         x = self.layers(x)
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
@@ -433,7 +471,7 @@ class ReformerLM(nn.Module):
         self.reformer = Reformer(emb, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, num_mem_kv = num_mem_kv)
         self.to_logits = nn.Linear(emb, num_tokens)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x = self.token_emb(x) + self.pos_emb(torch.arange(x.shape[1], device=x.device))
-        x = self.reformer(x)
+        x = self.reformer(x, **kwargs)
         return self.to_logits(x)
