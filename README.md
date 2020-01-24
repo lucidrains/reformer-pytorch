@@ -1,4 +1,4 @@
-# Reformer, the Efficient Transformer, in Pytorch
+## Reformer, the Efficient Transformer, in Pytorch
 
 <img src="./lsh_attention.png" width="500">
 
@@ -110,7 +110,7 @@ attn_out, buckets = attn(qk, v) # (10, 1024, 128)
 3. ~~All-attention learned memory key values~~
 
 ## Citations
-```
+```bibtex
 @inproceedings{
     kitaev2020reformer,
     title={Reformer: The Efficient Transformer},
@@ -121,7 +121,7 @@ attn_out, buckets = attn(qk, v) # (10, 1024, 128)
 }
 ```
 
-```
+```bibtex
 @article{DBLP:journals/corr/abs-1907-01470,
   author    = {Sainbayar Sukhbaatar and
                Edouard Grave and
