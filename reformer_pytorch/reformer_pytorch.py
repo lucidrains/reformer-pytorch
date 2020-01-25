@@ -306,8 +306,8 @@ class LSHAttention(nn.Module):
         logits = torch.reshape(logits, (batch_size, self.n_hashes, seqlen, 1))
 
         if query_len != seqlen:
-            o = o[:, :, 0:query_len]
-            logits = logits[:, :, 0:query_len]
+            query_slice = (slice(None), slice(None), slice(0, query_len))
+            o, logits = o[query_slice], logits[query_slice]
 
         if self.n_hashes == 1:
             out = o.squeeze(1)
@@ -364,7 +364,6 @@ class LSHSelfAttention(nn.Module):
         attn_out = torch.cat([output for (output, _) in outputs], dim=0)
 
         out = split_heads(attn_out).view(b, t, e)
-
         return self.to_out(out)
 
 # simple full self attention for ablation
@@ -391,8 +390,7 @@ class SelfAttention(nn.Module):
 
         kv = torch.cat((x, mem, keys))
 
-        kv_len = t + m + keys.shape[0]
-        attn_shape = (t, kv_len)
+        attn_shape = (t, kv.shape[0])
         attn_mask = torch.zeros(*attn_shape, device=x.device)
         if self.causal:
             i, j = torch.triu_indices(t, t, 1)
@@ -419,13 +417,13 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, num_mem_kv = 0, keys = None):
+    def __init__(self, emb, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, num_mem_kv = 0):
         super().__init__()
         self.emb = emb
         self.depth = depth
 
-        get_full_attn = lambda: SettableArgs(SelfAttention(emb, heads, causal = causal, num_mem_kv = num_mem_kv), keys = keys)
-        get_lsh_attn = lambda: SettableArgs(LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv), keys = keys)
+        get_full_attn = lambda: SettableArgs(SelfAttention(emb, heads, causal = causal, num_mem_kv = num_mem_kv))
+        get_lsh_attn = lambda: SettableArgs(LSHSelfAttention(emb, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv))
 
         get_attn = get_full_attn if use_full_attn else get_lsh_attn
         get_ff = lambda: FeedForward(emb)
@@ -450,7 +448,7 @@ class Reformer(nn.Module):
             blocks.append(ReversibleBlock(f, g, split_along_dim=-1, fix_random_seed=True))
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks))
-        self.modules = list(chain(*[[m.f_block.fn, m.g_block.fn] for m in self.layers.reversible_blocks]))
+        self.modules = list(chain(*[[m.f_block.fn, m.g_block.fn] for m in blocks]))
 
     def set_reversible_args(self, *args, **kwargs):
         for module in self.modules:
