@@ -140,8 +140,9 @@ o = decoder(y, keys = enc_keys) # (1, 4096, 20000)
 ## Todo
 
 1. ~~Make it so Reformer can be used as decoder where queries only attend to fed key/values~~
-2. Recurrence like Transformer XL
-3. ~~All-attention learned memory key values~~
+2. ~~All-attention learned memory key values~~
+3. Recurrence like Transformer XL
+4. Option to switch to full shared-qk attention at shorter sequence lengths (< 2048 or a set threshold)
 
 ## Citations
 ```bibtex
