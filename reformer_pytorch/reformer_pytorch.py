@@ -148,7 +148,7 @@ class LSHAttention(nn.Module):
 
         if self._rehash_each_round:
             rotated_vecs = torch.cat([rotated_vecs, -rotated_vecs], dim=-1)
-            buckets = torch.argmax(rotated_vecs, axis=-1)
+            buckets = torch.argmax(rotated_vecs, dim=-1)
             # buckets is now (self.n_hashes, seqlen). Next we add offsets so that
             # bucket numbers from different hashing rounds don't overlap.
             offsets = torch.arange(self.n_hashes, device=device)
@@ -312,7 +312,7 @@ class LSHAttention(nn.Module):
         if self.n_hashes == 1:
             out = o.squeeze(1)
         else:
-            probs = torch.exp(logits - torch.logsumexp(logits, dim=1, keepdims=True))
+            probs = torch.exp(logits - torch.logsumexp(logits, dim=1, keepdim=True))
             out = torch.sum(o * probs, dim=1)
 
         return out, buckets
