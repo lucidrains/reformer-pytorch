@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -401,18 +402,22 @@ class SelfAttention(nn.Module):
 
 # feedforward
 
+class GELU(nn.Module):
+    def forward(self, x):
+        return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+
 class FeedForward(nn.Module):
     def __init__(self, emb, mult = 4):
         super().__init__()
         self.emb = emb
-        self.proj_in = nn.Linear(emb, emb * mult)
-        self.proj_out = nn.Linear(emb * mult, emb)
+        self.net = nn.Sequential(
+            nn.Linear(emb, emb * mult),
+            GELU(),
+            nn.Linear(emb * mult, emb)
+        )
 
     def forward(self, x):
-        x = self.proj_in(x)
-        x = F.gelu(x)
-        x = self.proj_out(x)
-        return x
+        return self.net(x)
 
 # reformer lm
 
