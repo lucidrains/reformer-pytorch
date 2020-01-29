@@ -51,6 +51,17 @@ def default(val, default_val):
 
 # helper classes
 
+class FixedPositionEmbedding(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        inv_freq = 1 / (10000 ** (torch.arange(0, dim, 2) / dim))
+        self.register_buffer('inv_freq', inv_freq)
+
+    def forward(self, positions):
+        sinusoid_inp = torch.einsum("i,j->ij", positions.float(), self.inv_freq)
+        emb = torch.cat((sinusoid_inp.sin(), sinusoid_inp.cos()), dim=-1)
+        return emb[None, :, :]
+
 class ScaleNorm(nn.Module):
     def __init__(self, dim, eps=1e-5):
         super().__init__()
@@ -471,18 +482,19 @@ class Reformer(nn.Module):
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0, emb_dim = None, return_embeddings = False):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0, emb_dim = None, return_embeddings = False, fixed_position_emb = False):
         super().__init__()
         emb_dim = default(emb_dim, dim)
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
-        self.pos_emb = nn.Embedding(max_seq_len, emb_dim)
+        self.pos_emb = FixedPositionEmbedding(emb_dim) if fixed_position_emb else nn.Embedding(max_seq_len, emb_dim)
         self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
 
         self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, num_mem_kv = num_mem_kv)
         self.to_logits = identity if return_embeddings else nn.Linear(dim, num_tokens)
 
     def forward(self, x, **kwargs):
-        x = self.token_emb(x) + self.pos_emb(torch.arange(x.shape[1], device=x.device))
+        t = torch.arange(x.shape[1], device=x.device)
+        x = self.token_emb(x) + self.pos_emb(t).type(x.type())
         x = self.to_model_dim(x)
         x = self.reformer(x, **kwargs)
         return self.to_logits(x)

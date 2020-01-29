@@ -130,6 +130,7 @@ decoder = ReformerLM(
     depth = 12,
     heads = 8,
     max_seq_len = SEQ_LEN,
+    fixed_position_emb = True,
     causal = True
 )
 
