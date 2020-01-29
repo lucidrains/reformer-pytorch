@@ -41,7 +41,8 @@ model = ReformerLM(
     attn_chunks = 8,        # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
     num_mem_kv = 128,       # persistent learned memory key values, from all-attention paper
     twin_attention = False, # both branches of the reversible network will be attention
-    use_full_attn = False   # use full self attention, for comparison
+    use_full_attn = False,  # use full self attention, for comparison
+    full_attn_thres = 1024  # use full attention if context length is less than set value
 ).cuda()
 
 x = torch.randint(0, 20000, (1, 8192)).long().cuda()
@@ -144,7 +145,7 @@ o = decoder(y, keys = enc_keys) # (1, 4096, 20000)
 1. ~~Make it so Reformer can be used as decoder where queries only attend to fed key/values~~
 2. ~~All-attention learned memory key values~~
 3. Recurrence like Transformer XL
-4. Option to switch to full shared-qk attention at shorter sequence lengths (< 2048 or a set threshold)
+4. ~~Option to switch to full shared-qk attention at shorter sequence lengths (< 2048 or a set threshold)~~
 
 ## Citations
 ```bibtex
