@@ -9,7 +9,7 @@ from revtorch import ReversibleBlock, ReversibleSequence
 
 #constants
 
-TOKEN_SELF_MASK_VALUE = -5e4 # carefully set for half precision to work
+TOKEN_SELF_ATTN_VALUE = -5e4 # carefully set for half precision to work
 
 # helper fns
 
@@ -253,7 +253,7 @@ class LSHAttention(nn.Module):
 
         # Mask out attention to self except when no other targets are available.
         self_mask = bq_t[:, :, :, None] == bkv_t[:, :, None, :]
-        dots.masked_fill_(self_mask, TOKEN_SELF_MASK_VALUE)
+        dots.masked_fill_(self_mask, TOKEN_SELF_ATTN_VALUE)
         del self_mask
 
         # Mask out attention to other hash buckets.
@@ -353,7 +353,7 @@ class FullQKAttention(nn.Module):
 
         # qk attention requires tokens not attend to self
         i = torch.arange(t)
-        dot[:, i, i] = TOKEN_SELF_MASK_VALUE
+        dot[:, i, i] = TOKEN_SELF_ATTN_VALUE
 
         if self.causal:
             i, j = torch.triu_indices(t, t, 1)
