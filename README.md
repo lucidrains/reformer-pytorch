@@ -27,7 +27,7 @@ from reformer_pytorch import ReformerLM
 
 model = ReformerLM(
     num_tokens= 20000,
-    emb = 512,
+    dim = 512,
     depth = 12,
     max_seq_len = 8192,
     heads = 8,
@@ -56,7 +56,7 @@ import torch
 from reformer_pytorch import Reformer
 
 model = Reformer(
-    emb = 512,
+    dim = 512,
     depth = 12,
     max_seq_len = 8192,
     heads = 8,
@@ -75,7 +75,7 @@ import torch
 from reformer_pytorch import LSHSelfAttention
 
 attn = LSHSelfAttention(
-    emb = 128,
+    dim = 128,
     heads = 8,
     bucket_size = 64,
     n_hashes = 8,
@@ -109,13 +109,13 @@ A full Reformer encoder / decoder architecture example
 
 ```python
 import torch
-from reformer_pytorch.reformer_pytorch import Reformer, ReformerLM
+from reformer_pytorch import Reformer, ReformerLM
 
 DATA_LEN = 8192
 SEQ_LEN = 4096
 
 encoder = Reformer(
-    emb = 512,
+    dim = 512,
     depth = 12,
     heads = 8,
     max_seq_len = DATA_LEN
@@ -123,7 +123,7 @@ encoder = Reformer(
 
 decoder = ReformerLM(
     num_tokens = 20000,
-    emb = 512,
+    dim = 512,
     depth = 12,
     heads = 8,
     max_seq_len = SEQ_LEN,
