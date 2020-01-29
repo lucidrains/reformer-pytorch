@@ -7,6 +7,10 @@ from functools import partial
 from itertools import chain
 from revtorch import ReversibleBlock, ReversibleSequence
 
+#constants
+
+TOKEN_SELF_MASK_VALUE = -5e4 # carefully set for half precision to work
+
 # helper fns
 
 def identity(x):
@@ -213,7 +217,7 @@ class LSHAttention(nn.Module):
         # attention softmax, but normalizing keys is needed so that similarity for
         # the purposes of attention correctly corresponds to hash locality.
         bq = bqk
-        bk = F.normalize(bqk, p=2, dim=-1)
+        bk = F.normalize(bqk, p=2, dim=-1).type(bq.type())
 
         # Allow each chunk to attend within itself, and also one chunk back. Chunk
         # boundaries might occur in the middle of a sequence of items from the
@@ -238,7 +242,7 @@ class LSHAttention(nn.Module):
 
         # Mask out attention to self except when no other targets are available.
         self_mask = bq_t[:, :, :, None] == bkv_t[:, :, None, :]
-        dots.masked_fill_(self_mask, - 1e5)
+        dots.masked_fill_(self_mask, TOKEN_SELF_MASK_VALUE)
         del self_mask
 
         # Mask out attention to other hash buckets.
@@ -282,7 +286,7 @@ class LSHAttention(nn.Module):
 
         # Softmax.
         dots_logsumexp = torch.logsumexp(dots, dim=-1, keepdim=True)
-        dots = torch.exp(dots - dots_logsumexp)
+        dots = torch.exp(dots - dots_logsumexp).type(dots.type())
         dots = self.dropout(dots)
 
         bo = torch.einsum('buij,buje->buie', dots, bv)
@@ -332,13 +336,13 @@ class FullQKAttention(nn.Module):
         t = query_len
 
         q = qk[:, 0:query_len]
-        qk = F.normalize(qk, 2, dim=-1)
+        qk = F.normalize(qk, 2, dim=-1).type(q.type())
 
         dot = torch.einsum('bie,bje->bij', q, qk)
 
         # qk attention requires tokens not attend to self
         i = torch.arange(t)
-        dot[:, i, i] = -1e-5 
+        dot[:, i, i] = TOKEN_SELF_MASK_VALUE
 
         if self.causal:
             i, j = torch.triu_indices(t, t, 1)
@@ -381,7 +385,7 @@ class LSHSelfAttention(nn.Module):
         keys = default(keys, torch.empty(b, 0, e, device=device))
 
         kv_len = t + m + keys.shape[1]
-        use_lsh = not self.use_full_attn and kv_len < self.full_attn_thres
+        use_lsh = not self.use_full_attn or kv_len < self.full_attn_thres
         assert not use_lsh or (kv_len % self.bucket_size == 0), f'Sequence length needs to be divisible by target bucket size - {self.bucket_size}'
 
         x = torch.cat((x, mem, keys), dim=1)
