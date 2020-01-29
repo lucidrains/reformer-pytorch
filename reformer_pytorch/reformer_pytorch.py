@@ -382,7 +382,7 @@ class LSHSelfAttention(nn.Module):
         b, t, e, h, m = *x.shape, self.heads, self.num_mem_kv
 
         mem = self.mem_kv.expand(b, m, e)
-        keys = default(keys, torch.empty(b, 0, e, device=device))
+        keys = default(keys, torch.empty(b, 0, e, dtype=mem.dtype, device=device))
 
         kv_len = t + m + keys.shape[1]
         use_lsh = not self.use_full_attn or kv_len < self.full_attn_thres
