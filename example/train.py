@@ -1,5 +1,6 @@
 from reformer_pytorch import ReformerLM
 
+import random
 import tqdm
 import gzip
 import numpy as np
@@ -14,8 +15,9 @@ NUM_BATCHES = int(1e5)
 BATCH_SIZE = 4
 GRADIENT_ACCUMULATE_EVERY = 4
 LEARNING_RATE = 1e-4
-VALIDATE_EVERY = 100
-
+VALIDATE_EVERY  = 100
+GENERATE_EVERY  = 500
+GENERATE_LENGTH = 512
 SEQ_LEN = 4096
 
 # helpers
@@ -24,6 +26,31 @@ def cycle(loader):
     while True:
         for data in loader:
             yield data
+
+def get_top_p(logits, top_p=0.9):
+    sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+
+    sorted_indices_to_remove = cumulative_probs > top_p
+    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+    sorted_indices_to_remove[..., 0] = 0
+
+    indices_to_remove = sorted_indices[sorted_indices_to_remove]
+    logits[indices_to_remove] = float('-inf')
+    return logits
+
+def sample_next_token(logits, top_p=0.9, temperature = 1.0):
+    logits = logits[0, -1, :] / temperature
+    filtered_logits = get_top_p(logits, top_p=top_p)
+
+    probs = F.softmax(filtered_logits, dim=-1)
+    return torch.multinomial(probs, 1)
+
+def decode_token(token):
+    return str(chr(max(32, token)))
+
+def decode_tokens(tokens):
+    return ''.join(list(map(decode_token, tokens)))
 
 # instantiate model
 
@@ -65,8 +92,10 @@ class TextSamplerDataset(Dataset):
     def __len__(self):
         return self.data.size(0) // self.seq_len
 
-train_loader = cycle(DataLoader(TextSamplerDataset(data_train, SEQ_LEN), batch_size = BATCH_SIZE))
-val_loader = cycle(DataLoader(TextSamplerDataset(data_val, SEQ_LEN), batch_size = BATCH_SIZE))
+train_dataset = TextSamplerDataset(data_train, SEQ_LEN)
+val_dataset   = TextSamplerDataset(data_val, SEQ_LEN)
+train_loader  = cycle(DataLoader(train_dataset, batch_size = BATCH_SIZE))
+val_loader    = cycle(DataLoader(val_dataset, batch_size = BATCH_SIZE))
 
 # optimizer
 
@@ -79,7 +108,7 @@ def get_batch_loss(model, data):
     pred = model(x)
     return F.cross_entropy(pred.transpose(1, 2), y, reduction='mean')
 
-for i in tqdm.tqdm(range(NUM_BATCHES), mininterval=10.):
+for i in tqdm.tqdm(range(NUM_BATCHES), mininterval=10., desc='training'):
     model.train()
 
     for __ in range(GRADIENT_ACCUMULATE_EVERY):
@@ -91,8 +120,25 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval=10.):
     optim.step()
     optim.zero_grad()
 
-    if i != 0 and i % VALIDATE_EVERY == 0:
+    if i % VALIDATE_EVERY == 0:
         model.eval()
         with torch.no_grad():
             loss = get_batch_loss(model, next(val_loader))
             print(f'validation loss: {loss.item()}')
+
+    if i % GENERATE_EVERY == 0:
+        model.eval()
+        with torch.no_grad():
+            inp, _ = random.choice(val_dataset)
+            output_str = ''
+            prime = decode_tokens(inp)
+
+            print(f'%s \n\n %s', (prime, '*' * 100))
+
+            for _ in tqdm.tqdm(range(GENERATE_LENGTH), desc='generating'):
+                logits = model(inp[None, :])
+                next_token = sample_next_token(logits)
+                output_str += decode_token(next_token)
+                inp = torch.cat((inp[1:], next_token), dim=0)
+
+            print(output_str)
