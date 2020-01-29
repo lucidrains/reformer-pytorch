@@ -27,11 +27,12 @@ from reformer_pytorch import ReformerLM
 
 model = ReformerLM(
     num_tokens= 20000,
-    dim = 512,
+    dim = 1024,
     depth = 12,
     max_seq_len = 8192,
     heads = 8,
     lsh_dropout = 0.1,
+    emb_dim = 128,        # embedding factorization for further memory savings
     causal = True,        # auto-regressive or not
     bucket_size = 64,     # average size of qk per bucket, 64 was recommended in paper
     n_hashes = 4,         # 4 is permissible per author, 8 is the best but slower
@@ -124,6 +125,7 @@ encoder = Reformer(
 decoder = ReformerLM(
     num_tokens = 20000,
     dim = 512,
+    emb_dim = 128,
     depth = 12,
     heads = 8,
     max_seq_len = SEQ_LEN,
