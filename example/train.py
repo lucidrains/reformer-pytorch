@@ -28,7 +28,7 @@ def cycle(loader):
 # instantiate model
 
 model = ReformerLM(
-    emb = 512,
+    dim = 512,
     depth = 6,
     max_seq_len = SEQ_LEN,
     num_tokens = 256,
