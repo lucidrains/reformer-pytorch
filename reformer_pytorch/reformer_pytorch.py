@@ -144,7 +144,7 @@ class LSHAttention(nn.Module):
             self.n_hashes if self._rehash_each_round else 1,
             rot_size // 2)
 
-        random_rotations = torch.randn(rotations_shape, device=device).expand(batch_size, -1, -1, -1)
+        random_rotations = torch.randn(rotations_shape, dtype=vecs.dtype, device=device).expand(batch_size, -1, -1, -1)
 
         dropped_vecs = self.dropout_for_hash(vecs)
         rotated_vecs = torch.einsum('btf,bfhi->bhti', dropped_vecs, random_rotations)
