@@ -494,7 +494,9 @@ class ReformerLM(nn.Module):
 
     def forward(self, x, **kwargs):
         t = torch.arange(x.shape[1], device=x.device)
-        x = self.token_emb(x) + self.pos_emb(t).type(x.type())
+        x = self.token_emb(x)
+        x = x + self.pos_emb(t).type(x.type())
+
         x = self.to_model_dim(x)
         x = self.reformer(x, **kwargs)
         return self.to_logits(x)
