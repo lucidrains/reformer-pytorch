@@ -467,7 +467,7 @@ class Reformer(nn.Module):
 
             blocks.append(ReversibleBlock(f, g, split_along_dim=-1, fix_random_seed=True))
 
-        self.layers = ReversibleSequence(nn.ModuleList(blocks))
+        self.layers = ReversibleSequence(nn.ModuleList(blocks), eagerly_discard_variables = False)
         self.modules = list(chain(*[[m.f_block.fn, m.g_block.fn] for m in blocks]))
 
     def set_reversible_args(self, *args, **kwargs):
