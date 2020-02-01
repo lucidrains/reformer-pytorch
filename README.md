@@ -107,7 +107,9 @@ attn_out, buckets = attn(qk, v) # (10, 1024, 128)
 # buckets will contain the bucket number (post-argmax) of each token of each batch
 ```
 
-A full Reformer encoder / decoder architecture example
+## Examples
+
+A full Reformer sequence → sequence, say translation
 
 ```python
 import torch
@@ -145,12 +147,52 @@ enc_keys = encoder(x)               # (1, 4096, 1024)
 yo = decoder(yi, keys = enc_keys)   # (1, 4096, 20000)
 ```
 
+A full Reformer image → caption
+
+```python
+import torch
+from torch.nn import Sequential
+from torchvision import models
+from reformer_pytorch import Reformer, ReformerLM
+
+resnet = models.resnet50(pretrained=True)
+resnet = Sequential(*list(resnet.children())[:-4])
+
+SEQ_LEN = 4096
+
+encoder = Reformer(
+    dim = 512,
+    depth = 6,
+    heads = 8,
+    max_seq_len = 4096,
+)
+
+decoder = ReformerLM(
+    num_tokens = 20000,
+    dim = 512,
+    depth = 6,
+    heads = 8,
+    max_seq_len = SEQ_LEN,
+    causal = True
+)
+
+x  = torch.randn(1, 3, 512, 512)
+yi = torch.randint(0, 20000, (1, SEQ_LEN)).long()
+
+visual_emb = resnet(x)
+b, c, h, w = visual_emb.shape
+visual_emb = visual_emb.view(1, c, h * w).transpose(1, 2) # nchw to nte
+
+enc_keys = encoder(visual_emb)
+yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
+```
+
 ## Todo
 
 1. ~~Make it so Reformer can be used as decoder where queries only attend to fed key/values~~
 2. ~~All-attention learned memory key values~~
-3. Recurrence like Transformer XL
-4. ~~Option to switch to full shared-qk attention at shorter sequence lengths (< 2048 or a set threshold)~~
+3. ~~Option to switch to full shared-qk attention at shorter sequence lengths (< 2048 or a set threshold)~~
+4. Recurrence like Transformer XL
 
 ## Citations
 ```bibtex
@@ -178,3 +220,5 @@ yo = decoder(yi, keys = enc_keys)   # (1, 4096, 20000)
   url       = {http://arxiv.org/abs/1907.01470}
 }
 ```
+
+[♥](https://www.youtube.com/watch?v=GUo2XuqMcCU)
