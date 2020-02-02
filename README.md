@@ -187,6 +187,10 @@ enc_keys = encoder(visual_emb)
 yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 ```
 
+## Benchmarks
+
+- @zbloss has kindly added the GLUE benchmarks under the `glue/` directory.
+
 ## Todo
 
 1. ~~Make it so Reformer can be used as decoder where queries only attend to fed key/values~~
