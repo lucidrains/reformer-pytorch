@@ -16,14 +16,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from reformer_pytorch.reformer_pytorch import Reformer, ReformerLM
-from revtorch import ReversibleBlock, ReversibleSequence
+from reformer_pytorch import Reformer, ReformerLM
+
 from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
 from transformers.data.metrics import glue_compute_metrics as compute_metrics
 from transformers.data.processors.glue import glue_convert_examples_to_features as convert_examples_to_features
 from transformers.data.processors.glue import glue_output_modes as output_modes
 from transformers.data.processors.glue import glue_processors as processors
-
 
 class TrainerGLUE(object):
 
@@ -352,17 +351,8 @@ class TrainerGLUE(object):
         )
         return dataset
 
-
 max_seq_len = 2048
 
-# model = Reformer(
-#     dim=512,
-#     depth=12,
-#     max_seq_len=max_seq_len,
-#     heads=8,
-#     lsh_dropout=0.1,
-#     causal=True
-# ).cuda()
 tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 tokenizer.max_len = max_seq_len
 
@@ -377,14 +367,8 @@ model = ReformerLM(
     ff_chunks=10,
     lsh_dropout=0.1,
     weight_tie=True,
-    causal=True,
-    use_full_attn=False  # set this to true for comparison with full attention
+    causal=True
 ).cuda()
-
-x = torch.randint(1, tokenizer.vocab_size, (1, max_seq_len)).long().cuda()
-y = model(x)  # (1, max_seq_len, 512)
-
-print(f'y: {y}\n{y.shape}')
 
 # training on glue tasks
 for key in processors.keys():
