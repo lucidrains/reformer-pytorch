@@ -366,7 +366,7 @@ class FullQKAttention(nn.Module):
 # Shared qk attention, using either full or LSH attention
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, use_full_attn = False, full_attn_thres = 0, **kwargs):
+    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, use_full_attn = False, full_attn_thres = None, **kwargs):
         super().__init__()
         assert dim % heads == 0, 'dimensions must be divisible by number of heads'
 
@@ -383,7 +383,7 @@ class LSHSelfAttention(nn.Module):
         self.full_attn = FullQKAttention(causal = causal)
 
         self.use_full_attn = use_full_attn
-        self.full_attn_thres = full_attn_thres
+        self.full_attn_thres = default(full_attn_thres, bucket_size)
 
         self.num_mem_kv = num_mem_kv
         self.mem_kv = nn.Parameter(torch.randn(1, num_mem_kv, dim, requires_grad=True))
@@ -396,7 +396,7 @@ class LSHSelfAttention(nn.Module):
         keys = default(keys, torch.empty(b, 0, e, dtype=mem.dtype, device=device))
 
         kv_len = t + m + keys.shape[1]
-        use_lsh = not self.use_full_attn or kv_len < self.full_attn_thres
+        use_lsh = not self.use_full_attn or kv_len <= self.full_attn_thres
         assert not use_lsh or (kv_len % self.bucket_size == 0), f'Sequence length needs to be divisible by target bucket size - {self.bucket_size}'
 
         x = torch.cat((x, mem, keys), dim=1)
@@ -440,7 +440,7 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0):
+    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = None, num_mem_kv = 0):
         super().__init__()
         self.dim = dim
         self.depth = depth
@@ -482,7 +482,7 @@ class Reformer(nn.Module):
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0, emb_dim = None, return_embeddings = False, fixed_position_emb = False):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = None, num_mem_kv = 0, emb_dim = None, return_embeddings = False, fixed_position_emb = False):
         super().__init__()
         emb_dim = default(emb_dim, dim)
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
