@@ -42,7 +42,8 @@ model = ReformerLM(
     num_mem_kv = 128,       # persistent learned memory key values, from all-attention paper
     twin_attention = False, # both branches of the reversible network will be attention
     use_full_attn = False,  # use full self attention, for comparison
-    full_attn_thres = 1024  # use full attention if context length is less than set value
+    full_attn_thres = 1024, # use full attention if context length is less than set value
+    use_scale_norm = False  # use scale norm from 'Transformers without tears' paper
 ).cuda()
 
 x = torch.randint(0, 20000, (1, 8192)).long().cuda()
@@ -200,8 +201,7 @@ yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 
 ## Citations
 ```bibtex
-@inproceedings{
-    kitaev2020reformer,
+@inproceedings{kitaev2020reformer,
     title={Reformer: The Efficient Transformer},
     author={Nikita Kitaev and Lukasz Kaiser and Anselm Levskaya},
     booktitle={International Conference on Learning Representations},
@@ -212,16 +212,26 @@ yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 
 ```bibtex
 @article{DBLP:journals/corr/abs-1907-01470,
-  author    = {Sainbayar Sukhbaatar and
+    author    = {Sainbayar Sukhbaatar and
                Edouard Grave and
                Guillaume Lample and
                Herv{\'{e}} J{\'{e}}gou and
                Armand Joulin},
-  title     = {Augmenting Self-attention with Persistent Memory},
-  journal   = {CoRR},
-  volume    = {abs/1907.01470},
-  year      = {2019},
-  url       = {http://arxiv.org/abs/1907.01470}
+    title     = {Augmenting Self-attention with Persistent Memory},
+    journal   = {CoRR},
+    volume    = {abs/1907.01470},
+    year      = {2019},
+    url       = {http://arxiv.org/abs/1907.01470}
+}
+```
+
+```bibtex
+@article{1910.05895,
+    author  = {Toan Q. Nguyen and Julian Salazar},
+    title   = {Transformers without Tears: Improving the Normalization of Self-Attention},
+    year    = {2019},
+    eprint  = {arXiv:1910.05895},
+    doi     = {10.5281/zenodo.3525484},
 }
 ```
 
