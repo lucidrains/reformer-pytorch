@@ -343,13 +343,14 @@ class FullQKAttention(nn.Module):
         self.causal = causal
 
     def forward(self, qk, v, query_len = None):
-        query_len = default(query_len, qk.shape[1])
+        _, seq_len, dim = qk.shape
+        query_len = default(query_len, seq_len)
         t = query_len
 
         q = qk[:, 0:query_len]
         qk = F.normalize(qk, 2, dim=-1).type(q.type())
 
-        dot = torch.einsum('bie,bje->bij', q, qk)
+        dot = torch.einsum('bie,bje->bij', q, qk) * (dim ** -0.5)
 
         # qk attention requires tokens not attend to self
         i = torch.arange(t)
