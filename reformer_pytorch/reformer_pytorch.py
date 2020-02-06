@@ -49,6 +49,9 @@ def cache_fn(f):
 def default(val, default_val):
     return default_val if val is None else val
 
+def max_neg_value(tensor):
+    return -torch.finfo(tensor.dtype).max
+
 # helper classes
 
 class FixedPositionEmbedding(nn.Module):
@@ -244,19 +247,20 @@ class LSHAttention(nn.Module):
 
         # Dot-product attention.
         dots = torch.einsum('bhie,bhje->bhij', bq, bk) * (dim ** -0.5)
+        masked_value = max_neg_value(dots)
 
         if input_mask is not None:
             input_mask = F.pad(input_mask, (0, seqlen - input_mask.shape[1]), 'constant', True)
             mq = input_mask.gather(1, st).reshape((batch_size, chunk_size, -1))
             mkv = look_one_back(mq)
             mask = mq[:, :, :, None] * mkv[:, :, None, :]
-            dots.masked_fill_(~mask, float('-inf'))
+            dots.masked_fill_(~mask, masked_value)
             del mask
 
         # Causal masking
         if self.causal:
             mask = bq_t[:, :, :, None] < bkv_t[:, :, None, :].clamp(max=query_len - 1)
-            dots.masked_fill_(mask, float('-inf'))
+            dots.masked_fill_(mask, masked_value)
             del mask
 
         # Mask out attention to self except when no other targets are available.
@@ -267,7 +271,7 @@ class LSHAttention(nn.Module):
         # Mask out attention to other hash buckets.
         if not self._attend_across_buckets:
             bucket_mask = bq_buckets[:, :, :, None] != bkv_buckets[:, :, None, :]
-            dots.masked_fill_(bucket_mask, float('-inf'))
+            dots.masked_fill_(bucket_mask, masked_value)
             del bucket_mask
 
         # Don't double-count query-key pairs across multiple rounds of hashing.
@@ -363,17 +367,16 @@ class FullQKAttention(nn.Module):
         # qk attention requires tokens not attend to self
         i = torch.arange(t)
         dot[:, i, i] = TOKEN_SELF_ATTN_VALUE
+        masked_value = max_neg_value(dot)
 
         if input_mask is not None:
-            mq = input_mask[:, :, None]
-            mk = F.pad(input_mask, (0, seq_len - mq.shape[1]), 'constant', True)[:, None, :]
-            mask = mq * mk
-            masked_value = -torch.finfo(dot.dtype).max
+            mask = input_mask[:, :, None] * input_mask[:, None, :]
+            mask = F.pad(mask, (0, seq_len - mask.shape[-1]), 'constant', True)
             dot.masked_fill_(~mask, masked_value)
 
         if self.causal:
             i, j = torch.triu_indices(t, t, 1)
-            dot[:, i, j] = float('-inf')
+            dot[:, i, j] = masked_value
 
         dot = dot.softmax(dim=-1)
         out = torch.einsum('bij,bje->bie', dot, v)
