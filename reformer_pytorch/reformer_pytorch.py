@@ -188,7 +188,7 @@ class LSHAttention(nn.Module):
 
         return buckets
 
-    def forward(self, qk, v, query_len = None):
+    def forward(self, qk, v, query_len = None, input_mask = None):
         batch_size, seqlen, dim = qk.shape
         query_len = default(query_len, seqlen)
         device = qk.device
@@ -244,6 +244,14 @@ class LSHAttention(nn.Module):
 
         # Dot-product attention.
         dots = torch.einsum('bhie,bhje->bhij', bq, bk) * (dim ** -0.5)
+
+        if input_mask is not None:
+            input_mask = F.pad(input_mask, (0, seqlen - input_mask.shape[1]), 'constant', True)
+            mq = input_mask.gather(1, st).reshape((batch_size, chunk_size, -1))
+            mkv = look_one_back(mq)
+            mask = mq[:, :, :, None] * mkv[:, :, None, :]
+            dots.masked_fill_(~mask, float('-inf'))
+            del mask
 
         # Causal masking
         if self.causal:
@@ -342,7 +350,7 @@ class FullQKAttention(nn.Module):
         super().__init__()
         self.causal = causal
 
-    def forward(self, qk, v, query_len = None):
+    def forward(self, qk, v, query_len = None, input_mask = None):
         _, seq_len, dim = qk.shape
         query_len = default(query_len, seq_len)
         t = query_len
@@ -355,6 +363,13 @@ class FullQKAttention(nn.Module):
         # qk attention requires tokens not attend to self
         i = torch.arange(t)
         dot[:, i, i] = TOKEN_SELF_ATTN_VALUE
+
+        if input_mask is not None:
+            mq = input_mask[:, :, None]
+            mk = F.pad(input_mask, (0, seq_len - mq.shape[1]), 'constant', True)[:, None, :]
+            mask = mq * mk
+            masked_value = -torch.finfo(dot.dtype).max
+            dot.masked_fill_(~mask, masked_value)
 
         if self.causal:
             i, j = torch.triu_indices(t, t, 1)
@@ -389,7 +404,7 @@ class LSHSelfAttention(nn.Module):
         self.num_mem_kv = num_mem_kv
         self.mem_kv = nn.Parameter(torch.randn(1, num_mem_kv, dim, requires_grad=True))
 
-    def forward(self, x, keys = None):
+    def forward(self, x, keys = None, input_mask = None):
         device = x.device
         b, t, e, h, m = *x.shape, self.heads, self.num_mem_kv
 
@@ -414,7 +429,7 @@ class LSHSelfAttention(nn.Module):
         v = merge_heads(v)
 
         attn_fn = self.lsh_attn if use_lsh else self.full_attn
-        partial_attn_fn = partial(attn_fn, query_len = t)
+        partial_attn_fn = partial(attn_fn, query_len = t, input_mask = input_mask)
         outputs = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
         attn_out = torch.cat([output for (output, _) in outputs], dim=0)
 
@@ -476,9 +491,9 @@ class Reformer(nn.Module):
             if isinstance(module, SettableArgs):
                 module.set_args(*args, **kwargs)
 
-    def forward(self, x, keys = None):
+    def forward(self, x, **kwargs):
         x = torch.cat([x, x], dim = -1)
-        self.set_reversible_args(keys = keys)
+        self.set_reversible_args(**kwargs)
         x = self.layers(x)
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
