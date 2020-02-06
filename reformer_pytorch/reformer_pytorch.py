@@ -249,6 +249,7 @@ class LSHAttention(nn.Module):
         dots = torch.einsum('bhie,bhje->bhij', bq, bk) * (dim ** -0.5)
         masked_value = max_neg_value(dots)
 
+        # Input mask for padding in variable lengthed sequences
         if input_mask is not None:
             input_mask = F.pad(input_mask, (0, seqlen - input_mask.shape[1]), 'constant', True)
             mq = input_mask.gather(1, st).reshape((batch_size, chunk_size, -1))
@@ -369,6 +370,7 @@ class FullQKAttention(nn.Module):
         dot[:, i, i] = TOKEN_SELF_ATTN_VALUE
         masked_value = max_neg_value(dot)
 
+        # Input mask for padding in variable lengthed sequences
         if input_mask is not None:
             mask = input_mask[:, :, None] * input_mask[:, None, :]
             mask = F.pad(mask, (0, seq_len - mask.shape[-1]), 'constant', True)

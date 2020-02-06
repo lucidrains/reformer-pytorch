@@ -190,7 +190,7 @@ yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 
 ## Benchmarks
 
-- @zbloss has kindly added the GLUE benchmarks under the `glue/` directory.
+- <a href="https://github.com/zbloss">Zachary Bloss</a> has kindly added code for training GLUE under `examples/glue`
 
 ## Todo
 
@@ -202,11 +202,11 @@ yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 ## Citations
 ```bibtex
 @inproceedings{kitaev2020reformer,
-    title={Reformer: The Efficient Transformer},
-    author={Nikita Kitaev and Lukasz Kaiser and Anselm Levskaya},
-    booktitle={International Conference on Learning Representations},
-    year={2020},
-    url={https://openreview.net/forum?id=rkgNKkHtvB}
+    title       = {Reformer: The Efficient Transformer},
+    author      = {Nikita Kitaev and Lukasz Kaiser and Anselm Levskaya},
+    booktitle   = {International Conference on Learning Representations},
+    year        = {2020},
+    url         = {https://openreview.net/forum?id=rkgNKkHtvB}
 }
 ```
 
