@@ -25,10 +25,10 @@ def batched_index_select(values, indices):
     last_dim = values.shape[-1]
     return values.gather(1, indices[:, :, None].expand(-1, -1, last_dim))
 
-def process_inputs_chunk(fn, *args, chunks=1):
-    chunked_inputs = list(map(lambda x: x.chunk(chunks, dim=0), args))
+def process_inputs_chunk(fn, *args, chunks=1, dim=0):
+    chunked_inputs = list(map(lambda x: x.chunk(chunks, dim=dim), args))
     outputs = [fn(*input_pair) for input_pair in zip(*chunked_inputs)]
-    return outputs
+    return tuple(map(lambda x: torch.cat(x, dim=dim), zip(*outputs)))
 
 def chunked_sum(tensor, chunks=1):
     *orig_size, last_dim = tensor.shape
@@ -224,7 +224,6 @@ class LSHAttention(nn.Module):
         bq_t = bkv_t = torch.reshape(st, (batch_size, chunk_size, -1))
         bqk = torch.reshape(sqk, (batch_size, chunk_size, -1, dim))
         bv = torch.reshape(sv, (batch_size, chunk_size, -1, dim))
-        bq_buckets = bkv_buckets = torch.reshape(sbuckets_and_t // seqlen, (batch_size, chunk_size, -1))
 
         # Hashing operates on unit-length vectors. Unnormalized query vectors are
         # fine because they effectively provide a learnable temperature for the
@@ -243,7 +242,6 @@ class LSHAttention(nn.Module):
         bk = look_one_back(bk)
         bv = look_one_back(bv)
         bkv_t = look_one_back(bkv_t)
-        bkv_buckets = look_one_back(bkv_buckets)
 
         # Dot-product attention.
         dots = torch.einsum('bhie,bhje->bhij', bq, bk) * (dim ** -0.5)
@@ -271,6 +269,8 @@ class LSHAttention(nn.Module):
 
         # Mask out attention to other hash buckets.
         if not self._attend_across_buckets:
+            bq_buckets = bkv_buckets = torch.reshape(sbuckets_and_t // seqlen, (batch_size, chunk_size, -1))
+            bkv_buckets = look_one_back(bkv_buckets)
             bucket_mask = bq_buckets[:, :, :, None] != bkv_buckets[:, :, None, :]
             dots.masked_fill_(bucket_mask, masked_value)
             del bucket_mask
@@ -340,12 +340,8 @@ class LSHAttention(nn.Module):
             query_slice = (slice(None), slice(None), slice(0, query_len))
             o, logits = o[query_slice], logits[query_slice]
 
-        if self.n_hashes == 1:
-            out = o.squeeze(1)
-        else:
-            probs = torch.exp(logits - torch.logsumexp(logits, dim=1, keepdim=True))
-            out = torch.sum(o * probs, dim=1)
-
+        probs = torch.exp(logits - torch.logsumexp(logits, dim=1, keepdim=True))
+        out = torch.sum(o * probs, dim=1)
         return out, buckets
 
 # simple full attention
@@ -435,8 +431,7 @@ class LSHSelfAttention(nn.Module):
 
         attn_fn = self.lsh_attn if use_lsh else self.full_attn
         partial_attn_fn = partial(attn_fn, query_len = t, input_mask = input_mask)
-        outputs = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
-        attn_out = torch.cat([output for (output, _) in outputs], dim=0)
+        attn_out, buckets = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
 
         out = split_heads(attn_out).view(b, t, e)
         return self.to_out(out)
