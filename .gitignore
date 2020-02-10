@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+*.pt
+.idea/
+pretraining/tb_logs/
+pretraining/self-supervised.ipynb
+pretraining/Evaluation.ipynb
+pretraining/logs/
+pretraining/.ipynb_checkpoints/
+.vscode/
+.ipynb_checkpoints/
