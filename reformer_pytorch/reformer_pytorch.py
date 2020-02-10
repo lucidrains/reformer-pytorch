@@ -5,10 +5,6 @@ import torch.nn.functional as F
 from torch.autograd import Function
 from functools import partial
 from itertools import chain
-
-# external dependencies
-
-from torch_scatter import scatter_sum
 from revtorch import ReversibleBlock, ReversibleSequence
 
 #constants
@@ -319,9 +315,9 @@ class LSHAttention(nn.Module):
         # Softmax.
         dots_logsumexp = torch.logsumexp(dots, dim=-1, keepdim=True)
         dots = torch.exp(dots - dots_logsumexp).type(dots.type())
-        dots = self.dropout(dots)
+        dropped_dots = self.dropout(dots)
 
-        bo = torch.einsum('buij,buje->buie', dots, bv)
+        bo = torch.einsum('buij,buje->buie', dropped_dots, bv)
         so = torch.reshape(bo, (batch_size, -1, dim))
         slogits = torch.reshape(dots_logsumexp, (batch_size, -1,))
 
@@ -356,8 +352,9 @@ class LSHAttention(nn.Module):
 
         if self._return_attn:
             attn_unsort = ((bq_t * seqlen)[:, :, :, None] + bkv_t[:, :, None, :])
-            attn_unsort = attn_unsort.view(-1, 2 * self.bucket_size * self.bucket_size)
-            unsorted_dots = scatter_sum(dots.view_as(attn_unsort), attn_unsort)
+            attn_unsort = attn_unsort.view(-1, 2 * self.bucket_size * self.bucket_size).long()
+            unsorted_dots = torch.zeros(attn_unsort.shape[0], seqlen * seqlen, device=device)
+            unsorted_dots.scatter_add_(1, attn_unsort, dots.view_as(attn_unsort))
             unsorted_dots = unsorted_dots.reshape(batch_size, self.n_hashes, n_buckets, seqlen, seqlen).sum(dim=2)
             attn = torch.sum(unsorted_dots[:, :, 0:query_len, :] * probs, dim=1)
 
