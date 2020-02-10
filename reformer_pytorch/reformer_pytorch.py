@@ -5,6 +5,10 @@ import torch.nn.functional as F
 from torch.autograd import Function
 from functools import partial
 from itertools import chain
+
+# external dependencies
+
+from torch_scatter import scatter_sum
 from revtorch import ReversibleBlock, ReversibleSequence
 
 #constants
@@ -124,7 +128,8 @@ class LSHAttention(nn.Module):
                   attend_across_buckets = True,
                   rehash_each_round = True,
                   drop_for_hash_rate = 0.0,
-                  random_rotations_per_head = False):
+                  random_rotations_per_head = False,
+                  return_attn = False):
         super().__init__()
         if dropout >= 1.0:
             raise ValueError('Dropout rates must be lower than 1.')
@@ -144,6 +149,9 @@ class LSHAttention(nn.Module):
         self._attend_across_buckets = attend_across_buckets
         self._rehash_each_round = rehash_each_round
         self._random_rotations_per_head = random_rotations_per_head
+
+        # will expend extra computation to return attention matrix
+        self._return_attn = return_attn
 
     def hash_vectors(self, n_buckets, vecs):
         batch_size = vecs.shape[0]
@@ -342,7 +350,19 @@ class LSHAttention(nn.Module):
 
         probs = torch.exp(logits - torch.logsumexp(logits, dim=1, keepdim=True))
         out = torch.sum(o * probs, dim=1)
-        return out, buckets
+
+        # compute unsorted matrix
+        attn = torch.empty(0, device=device)
+
+        if self._return_attn:
+            attn_unsort = ((bq_t * seqlen)[:, :, :, None] + bkv_t[:, :, None, :])
+            attn_unsort = attn_unsort.view(-1, 2 * self.bucket_size * self.bucket_size)
+            unsorted_dots = scatter_sum(dots.view_as(attn_unsort), attn_unsort)
+            unsorted_dots = unsorted_dots.reshape(batch_size, self.n_hashes, n_buckets, seqlen, seqlen).sum(dim=2)
+            attn = torch.sum(unsorted_dots[:, :, 0:query_len, :] * probs, dim=1)
+
+        # return output, attention matrix, and bucket distribution
+        return out, attn, buckets
 
 # simple full attention
 
@@ -352,7 +372,7 @@ class FullQKAttention(nn.Module):
         self.causal = causal
 
     def forward(self, qk, v, query_len = None, input_mask = None):
-        _, seq_len, dim = qk.shape
+        b, seq_len, dim = qk.shape
         query_len = default(query_len, seq_len)
         t = query_len
 
@@ -378,12 +398,13 @@ class FullQKAttention(nn.Module):
 
         dot = dot.softmax(dim=-1)
         out = torch.einsum('bij,bje->bie', dot, v)
-        return out, dot
+
+        return out, dot, torch.empty(0)
 
 # Shared qk attention, using either full or LSH attention
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, use_full_attn = False, full_attn_thres = None, **kwargs):
+    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, use_full_attn = False, full_attn_thres = None, return_attn = False, **kwargs):
         super().__init__()
         assert dim % heads == 0, 'dimensions must be divisible by number of heads'
 
@@ -396,7 +417,7 @@ class LSHSelfAttention(nn.Module):
         self.to_out = nn.Linear(dim, dim)
 
         self.bucket_size = bucket_size
-        self.lsh_attn = LSHAttention(bucket_size=bucket_size, n_hashes=n_hashes, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, **kwargs)
+        self.lsh_attn = LSHAttention(bucket_size=bucket_size, n_hashes=n_hashes, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, return_attn = return_attn, **kwargs)
         self.full_attn = FullQKAttention(causal = causal)
 
         self.use_full_attn = use_full_attn
@@ -404,6 +425,8 @@ class LSHSelfAttention(nn.Module):
 
         self.num_mem_kv = num_mem_kv
         self.mem_kv = nn.Parameter(torch.randn(1, num_mem_kv, dim, requires_grad=True))
+
+        self.callback = None
 
     def forward(self, x, keys = None, input_mask = None):
         device = x.device
@@ -413,8 +436,10 @@ class LSHSelfAttention(nn.Module):
         keys = default(keys, torch.empty(b, 0, e, dtype=mem.dtype, device=device))
 
         kv_len = t + m + keys.shape[1]
-        use_lsh = not self.use_full_attn or kv_len <= self.full_attn_thres
-        assert not use_lsh or (kv_len % self.bucket_size == 0), f'Sequence length needs to be divisible by target bucket size - {self.bucket_size}'
+        use_full_attn = self.use_full_attn or kv_len <= self.full_attn_thres
+
+        if not use_full_attn:
+            assert not use_full_attn and (kv_len % self.bucket_size == 0), f'Sequence length needs to be divisible by target bucket size - {self.bucket_size}'
 
         x = torch.cat((x, mem, keys), dim=1)
         qk = self.toqk(x)
@@ -429,14 +454,17 @@ class LSHSelfAttention(nn.Module):
         qk = merge_heads(qk)
         v = merge_heads(v)
 
-        attn_fn = self.lsh_attn if use_lsh else self.full_attn
+        attn_fn = self.lsh_attn if not use_full_attn else self.full_attn
         partial_attn_fn = partial(attn_fn, query_len = t, input_mask = input_mask)
-        attn_out, buckets = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
+        out, attn, buckets = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
+        out = split_heads(out).view(b, t, e)
 
-        out = split_heads(attn_out).view(b, t, e)
+        if self.callback is not None:
+            self.callback(attn.reshape(b, h, t, -1), buckets.reshape(b, h, -1))
+
         return self.to_out(out)
 
-# feedforward
+# feed forward
 
 class GELU(nn.Module):
     def forward(self, x):

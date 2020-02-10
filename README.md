@@ -104,7 +104,8 @@ attn = LSHAttention(
 qk = torch.randn(10, 1024, 128)
 v = torch.randn(10, 1024, 128)
 
-attn_out, buckets = attn(qk, v) # (10, 1024, 128)
+out, attn, buckets = attn(qk, v) # (10, 1024, 128)
+# attn contains the unsorted attention weights, provided return_attn is set to True (costly otherwise)
 # buckets will contain the bucket number (post-argmax) of each token of each batch
 ```
 
@@ -186,6 +187,37 @@ visual_emb = visual_emb.view(1, c, h * w).transpose(1, 2) # nchw to nte
 
 enc_keys = encoder(visual_emb)
 yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
+```
+
+## Research
+
+To access the attention weights and bucket distribution, simply wrap the instantiated model with the `Recorder` wrapper class.
+
+```python
+import torch
+from reformer_pytorch import Reformer, Recorder
+
+model = Reformer(
+    dim = 512,
+    depth = 12,
+    max_seq_len = 8192,
+    heads = 8,
+    lsh_dropout = 0.1,
+    causal = True
+).cuda()
+
+model = Recorder(model)
+
+x = torch.randn(1, 8192, 512).cuda()
+y = model(x)
+
+model.recordings[0] # a list of attention weights and buckets for the first forward pass
+
+model.turn_off() # stop recording
+model.turn_on() # start recording
+model.clear() # clear the recordings
+
+model = model.eject() # recover the original model and remove all listeners
 ```
 
 ## Benchmarks
