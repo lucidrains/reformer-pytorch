@@ -355,6 +355,7 @@ class LSHAttention(nn.Module):
             attn_unsort = attn_unsort.view(batch_size * self.n_hashes, -1).long()
             unsorted_dots = torch.zeros(batch_size * self.n_hashes, seqlen * seqlen, device=device)
             unsorted_dots.scatter_add_(1, attn_unsort, dots.view_as(attn_unsort))
+            del attn_unsort
             unsorted_dots = unsorted_dots.reshape(batch_size, self.n_hashes, seqlen, seqlen)
             attn = torch.sum(unsorted_dots[:, :, 0:query_len, :] * probs, dim=1)
 
