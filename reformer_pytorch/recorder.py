@@ -40,6 +40,7 @@ class Recorder(nn.Module):
     def clear(self):
         del self.recordings
         self.recordings = defaultdict(list)
+        self.iter = 0        
 
     def record(self, attn, buckets):
         if not self.on: return
