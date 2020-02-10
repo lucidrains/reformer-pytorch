@@ -36,7 +36,7 @@ class Recorder(nn.Module):
 
     def record(self, attn, buckets):
         if not self.on: return
-        data = {'attn': attn.cpu(), 'buckets': buckets.cpu()}
+        data = {'attn': attn.detach().cpu(), 'buckets': buckets.detach().cpu()}
         self.recordings[self.iter].append(data)
 
     def forward(self, x):
