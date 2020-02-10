@@ -347,15 +347,15 @@ class LSHAttention(nn.Module):
         probs = torch.exp(logits - torch.logsumexp(logits, dim=1, keepdim=True))
         out = torch.sum(o * probs, dim=1)
 
-        # compute unsorted matrix
         attn = torch.empty(0, device=device)
 
+        # return unsorted attention weights
         if self._return_attn:
             attn_unsort = ((bq_t * seqlen)[:, :, :, None] + bkv_t[:, :, None, :])
-            attn_unsort = attn_unsort.view(-1, 2 * self.bucket_size * self.bucket_size).long()
-            unsorted_dots = torch.zeros(attn_unsort.shape[0], seqlen * seqlen, device=device)
+            attn_unsort = attn_unsort.view(batch_size * self.n_hashes, -1).long()
+            unsorted_dots = torch.zeros(batch_size * self.n_hashes, seqlen * seqlen, device=device)
             unsorted_dots.scatter_add_(1, attn_unsort, dots.view_as(attn_unsort))
-            unsorted_dots = unsorted_dots.reshape(batch_size, self.n_hashes, n_buckets, seqlen, seqlen).sum(dim=2)
+            unsorted_dots = unsorted_dots.reshape(batch_size, self.n_hashes, seqlen, seqlen)
             attn = torch.sum(unsorted_dots[:, :, 0:query_len, :] * probs, dim=1)
 
         # return output, attention matrix, and bucket distribution

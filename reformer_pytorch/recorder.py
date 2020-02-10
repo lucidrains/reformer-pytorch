@@ -9,20 +9,27 @@ class Recorder(nn.Module):
         self.recordings = defaultdict(list)
         self.net = net
         self.on = True
+        self.ejected = False
 
+    def eject(self):
+        self.ejected = True
+        self.clear()
+        self.unwire()
+        return self.net
+
+    def wire(self):
         for module in self.net.modules():
             if isinstance(module, LSHAttention):
                 module._return_attn = True
             if isinstance(module, LSHSelfAttention):
                 module.callback = self.record
 
-    def eject(self):
+    def unwire(self):
         for module in self.net.modules():
             if isinstance(module, LSHAttention):
                 module._return_attn = False
             if isinstance(module, LSHSelfAttention):
                 module.callback = None
-        return self.net
 
     def turn_on(self):
         self.on = True
@@ -40,6 +47,12 @@ class Recorder(nn.Module):
         self.recordings[self.iter].append(data)
 
     def forward(self, x):
+        assert not self.ejected, 'Recorder has already been ejected and disposed'
+        if self.on:
+            self.wire()
+
         out = self.net(x)
+
         self.iter += 1
+        self.unwire()
         return out
