@@ -7,7 +7,9 @@ This is a Pytorch implementation of Reformer https://openreview.net/pdf?id=rkgNK
 
 It includes LSH attention, reversible network, and chunking. It has been validated with an auto-regressive task (enwik8). It also includes additional features to make the entire network pure attention all the way down.
 
-Test 32k tokens with Colab [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1am1DRl80Kd3o6n_4u3MomPzYS0NfdHAC)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1am1DRl80Kd3o6n_4u3MomPzYS0NfdHAC) 32k tokens
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1awNgXYtjvUeXl1gS-v1iyDXTJJ-fyJIK) 81k tokens with half precision
 
 ## Install
 
