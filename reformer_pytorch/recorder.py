@@ -47,12 +47,12 @@ class Recorder(nn.Module):
         data = {'attn': attn.detach().cpu(), 'buckets': buckets.detach().cpu()}
         self.recordings[self.iter].append(data)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         assert not self.ejected, 'Recorder has already been ejected and disposed'
         if self.on:
             self.wire()
 
-        out = self.net(x)
+        out = self.net(x, **kwargs)
 
         self.iter += 1
         self.unwire()
