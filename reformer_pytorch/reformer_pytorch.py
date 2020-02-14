@@ -422,16 +422,18 @@ class LSHSelfAttention(nn.Module):
         self.full_attn_thres = default(full_attn_thres, bucket_size)
 
         self.num_mem_kv = num_mem_kv
-        self.mem_kv = nn.Parameter(torch.randn(1, num_mem_kv, dim, requires_grad=True))
+        self.mem_kv = nn.Parameter(torch.randn(1, num_mem_kv, dim, requires_grad=True)) if num_mem_kv > 0 else None
 
         self.callback = None
 
     def forward(self, x, keys = None, input_mask = None):
-        device = x.device
+        device, dtype = x.device, x.dtype
         b, t, e, h, m = *x.shape, self.heads, self.num_mem_kv
 
-        mem = self.mem_kv.expand(b, m, e)
-        keys = default(keys, torch.empty(b, 0, e, dtype=mem.dtype, device=device))
+        mem_kv = default(self.mem_kv, torch.empty(b, 0, e, dtype=dtype, device=device))
+        mem = mem_kv.expand(b, m, e)
+
+        keys = default(keys, torch.empty(b, 0, e, dtype=dtype, device=device))
 
         kv_len = t + m + keys.shape[1]
         use_full_attn = self.use_full_attn or kv_len <= self.full_attn_thres
