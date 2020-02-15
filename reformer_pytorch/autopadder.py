@@ -28,7 +28,7 @@ class Autopadder(nn.Module):
     def forward(self, x, **kwargs):
         b, t, m = *x.shape[:2], self.num_mem_kv
 
-        keys = kwargs.get('key')
+        keys = kwargs.get('keys')
         input_mask = kwargs.get('input_mask')
 
         k_len = 0 if keys is None else keys.shape[1]

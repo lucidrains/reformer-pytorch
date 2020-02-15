@@ -245,9 +245,10 @@ model = ReformerLM(
 model = Autopadder(model)
 
 SEQ_LEN = 7777 # odd sequence length
+keys = torch.randn(1, 137, 1024) # odd keys length
 
 x = torch.randint(0, 20000, (1, SEQ_LEN)).long().cuda()
-y = model(x) # (1, 7777, 20000)
+y = model(x, keys = keys) # (1, 7777, 20000)
 ```
 
 ## Benchmarks
