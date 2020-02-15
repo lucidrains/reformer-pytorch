@@ -222,6 +222,34 @@ model.clear() # clear the recordings
 model = model.eject() # recover the original model and remove all listeners
 ```
 
+## Additional Helpers
+
+Reformer comes with a slight drawback that the sequence must be neatly divisible by the bucket size * 2. I have provided a small helper tool that can help you auto-round the sequence length to the next best multiple.
+
+```python
+import torch
+from reformer_pytorch import ReformerLM, Autopadder
+
+model = ReformerLM(
+    num_tokens= 20000,
+    dim = 1024,
+    depth = 12,
+    max_seq_len = 8192,
+    heads = 8,
+    lsh_dropout = 0.1,
+    causal = True,
+    bucket_size = 63,   # odd bucket size
+    num_mem_kv = 77     # odd memory key length
+).cuda()
+
+model = Autopadder(model)
+
+SEQ_LEN = 7777 # odd sequence length
+
+x = torch.randint(0, 20000, (1, SEQ_LEN)).long().cuda()
+y = model(x) # (1, 7777, 20000)
+```
+
 ## Benchmarks
 
 - <a href="https://github.com/zbloss">Zachary Bloss</a> has kindly added code for training GLUE under `examples/glue`
