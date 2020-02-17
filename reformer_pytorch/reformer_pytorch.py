@@ -429,7 +429,7 @@ class LSHSelfAttention(nn.Module):
 
         self.callback = None
 
-    def forward(self, x, keys = None, input_mask = None):
+    def forward(self, x, keys = None, input_mask = None, context_mask = None):
         device, dtype = x.device, x.dtype
         b, t, e, h, m = *x.shape, self.heads, self.num_mem_kv
 
@@ -437,8 +437,9 @@ class LSHSelfAttention(nn.Module):
         mem = mem_kv.expand(b, m, e)
 
         keys = default(keys, torch.empty(b, 0, e, dtype=dtype, device=device))
+        c = keys.shape[1]
 
-        kv_len = t + m + keys.shape[1]
+        kv_len = t + m + c
         use_full_attn = self.use_full_attn or kv_len <= self.full_attn_thres
 
         x = torch.cat((x, mem, keys), dim=1)
@@ -454,8 +455,16 @@ class LSHSelfAttention(nn.Module):
         qk = merge_heads(qk)
         v = merge_heads(v)
 
+        mask = None
+        if input_mask is not None or context_mask is not None:
+            default_mask = torch.tensor([True], device=device)
+            i_mask = default(input_mask, default_mask.expand(b, t))
+            m_mask = default_mask.expand(b, m)
+            c_mask = default(context_mask, default_mask.expand(b, c))
+            mask = torch.cat((i_mask, m_mask, c_mask), dim=1)
+
         attn_fn = self.lsh_attn if not use_full_attn else self.full_attn
-        partial_attn_fn = partial(attn_fn, query_len = t, input_mask = input_mask)
+        partial_attn_fn = partial(attn_fn, query_len = t, input_mask = mask)
         out, attn, buckets = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
         out = split_heads(out).view(b, t, e)
 
