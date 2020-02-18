@@ -195,7 +195,7 @@ class LSHAttention(nn.Module):
 
         return buckets
 
-    def forward(self, qk, v, query_len = None, input_mask = None):
+    def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None):
         batch_size, seqlen, dim = qk.shape
 
         assert seqlen % (self.bucket_size * 2) == 0, f'Sequence length ({seqlen}) needs to be divisible by target bucket size  x 2 - {self.bucket_size * 2}'
@@ -254,9 +254,19 @@ class LSHAttention(nn.Module):
         dots = torch.einsum('bhie,bhje->bhij', bq, bk) * (dim ** -0.5)
         masked_value = max_neg_value(dots)
 
+        # Mask for post qk attention logits of the input sequence
+        if input_attn_mask is not None:
+            input_attn_mask = F.pad(input_attn_mask, (0, seqlen - input_attn_mask.shape[-1], 0, seqlen - input_attn_mask.shape[-2]), value=True)
+            dot_attn_indices = ((bq_t * seqlen)[:, :, :, None] + bkv_t[:, :, None, :])
+            input_attn_mask = input_attn_mask.reshape(batch_size, -1)
+            dot_attn_indices = dot_attn_indices.reshape(batch_size, -1)
+            mask = input_attn_mask.gather(1, dot_attn_indices).reshape_as(dots)
+            dots.masked_fill_(~mask, masked_value)
+            del mask
+
         # Input mask for padding in variable lengthed sequences
         if input_mask is not None:
-            input_mask = F.pad(input_mask, (0, seqlen - input_mask.shape[1]), 'constant', True)
+            input_mask = F.pad(input_mask, (0, seqlen - input_mask.shape[1]), value=True)
             mq = input_mask.gather(1, st).reshape((batch_size, chunk_size, -1))
             mkv = look_one_back(mq)
             mask = mq[:, :, :, None] * mkv[:, :, None, :]
@@ -372,7 +382,7 @@ class FullQKAttention(nn.Module):
         super().__init__()
         self.causal = causal
 
-    def forward(self, qk, v, query_len = None, input_mask = None):
+    def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None):
         b, seq_len, dim = qk.shape
         query_len = default(query_len, seq_len)
         t = query_len
@@ -389,9 +399,14 @@ class FullQKAttention(nn.Module):
 
         # Input mask for padding in variable lengthed sequences
         if input_mask is not None:
-            mask = input_mask[:, :, None] * input_mask[:, None, :]
-            mask = F.pad(mask, (0, seq_len - mask.shape[-1]), 'constant', True)
+            mask = input_mask[:, 0:query_len, None] * input_mask[:, None, :]
+            mask = F.pad(mask, (0, seq_len - mask.shape[-1]), value=True)
             dot.masked_fill_(~mask, masked_value)
+
+        # Mask for post qk attention logits of the input sequence
+        if input_attn_mask is not None:
+            input_attn_mask = F.pad(input_attn_mask, (0, seq_len - input_attn_mask.shape[-1]), value=True)
+            dot.masked_fill_(~input_attn_mask, masked_value)
 
         if self.causal:
             i, j = torch.triu_indices(t, t, 1)
@@ -429,7 +444,7 @@ class LSHSelfAttention(nn.Module):
 
         self.callback = None
 
-    def forward(self, x, keys = None, input_mask = None, context_mask = None):
+    def forward(self, x, keys = None, input_mask = None, input_attn_mask = None, context_mask = None):
         device, dtype = x.device, x.dtype
         b, t, e, h, m = *x.shape, self.heads, self.num_mem_kv
 
@@ -464,7 +479,7 @@ class LSHSelfAttention(nn.Module):
             mask = torch.cat((i_mask, m_mask, c_mask), dim=1)
 
         attn_fn = self.lsh_attn if not use_full_attn else self.full_attn
-        partial_attn_fn = partial(attn_fn, query_len = t, input_mask = mask)
+        partial_attn_fn = partial(attn_fn, query_len = t, input_mask = mask, input_attn_mask = input_attn_mask)
         out, attn, buckets = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
         out = split_heads(out).view(b, t, e)
 
