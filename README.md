@@ -251,6 +251,47 @@ x = torch.randint(0, 20000, (1, SEQ_LEN)).long().cuda()
 y = model(x, keys = keys) # (1, 7777, 20000)
 ```
 
+## Helpers for training auto-regressive models
+
+A lot of users are only interested in an auto-regressive language model (like GPT-2). Here is a training wrapper to make it easy to both train and evaluate on arbitrarily lengthed sequences of encoded tokens. You will have to take care of the encoding and decoding yourself.
+
+```python
+import torch
+from torch import randint
+
+from reformer_pytorch.reformer_pytorch import ReformerLM
+from reformer_pytorch.generative_tools import TrainingWrapper
+
+model = ReformerLM(
+    num_tokens= 20000,
+    dim = 1024,
+    depth = 12,
+    max_seq_len = 4096,
+    lsh_dropout = 0.1,
+    causal = True,
+    full_attn_thres = 1024
+)
+
+# 0 is used for padding and no loss to be calculated on it
+model = TrainingWrapper(model, ignore_index = 0, pad_value = 0)
+
+x_train = [
+    randint(0, 20000, (120,)),
+    randint(0, 20000, (253,)),
+    randint(0, 20000, (846,))
+]
+
+# when training, set return_loss equal to True
+model.train()
+loss = model(x_train, return_loss = True)
+loss.backward()
+
+# when evaluating, just execute as normal
+model.eval()
+x_eval = [ randint(0, 20000, (275,)) ]
+sample = model(x_eval) # (1, 275, 20000) - now use your favorite sampling strategy and repeat
+```
+
 ## Benchmarks
 
 - <a href="https://github.com/zbloss">Zachary Bloss</a> has kindly added code for training GLUE under `examples/glue`
