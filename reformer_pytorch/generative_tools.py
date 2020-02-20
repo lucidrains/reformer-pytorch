@@ -1,4 +1,5 @@
 from functools import partial
+import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
@@ -17,13 +18,19 @@ class TrainingWrapper(nn.Module):
         pad = partial(pad_sequence, batch_first = True, padding_value = self.pad_value)
 
         if not return_loss:
-            x = pad(x)
+            if not isinstance(x, torch.Tensor):
+                x = pad(x)
             return self.net(x, **kwargs)
 
         assert self.training, 'you must be training in order to return the loss'
 
-        xi = pad(list(map(lambda t: t[:-1], x)))
-        xo = pad(list(map(lambda t: t[1:], x)))
+        if isinstance(x, torch.Tensor):
+            xi = x[:, :-1]
+            xo = x[:, 1:]
+        else:
+            xi = pad(list(map(lambda t: t[:-1], x)))
+            xo = pad(list(map(lambda t: t[1:], x)))
+
         out = self.net(xi, **kwargs)
 
         loss = F.cross_entropy(out.transpose(1, 2), xo, ignore_index = self.ignore_index)

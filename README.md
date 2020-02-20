@@ -275,6 +275,10 @@ model = ReformerLM(
 # 0 is used for padding and no loss to be calculated on it
 model = TrainingWrapper(model, ignore_index = 0, pad_value = 0)
 
+# the wrapper can handle evenly packed sequences
+x_train = randint(0, 20000, (3, 357))
+
+# or if you have a list of uneven sequences, it will be padded for you
 x_train = [
     randint(0, 20000, (120,)),
     randint(0, 20000, (253,)),
