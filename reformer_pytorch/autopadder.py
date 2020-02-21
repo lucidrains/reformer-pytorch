@@ -2,7 +2,7 @@ import math
 from torch import nn
 import torch.nn.functional as F
 
-from reformer_pytorch.reformer_pytorch import Reformer, ReformerLM
+from reformer_pytorch.reformer_pytorch import Reformer, ReformerLM, LSHSelfAttention
 
 def pad_to_multiple(tensor, seqlen, multiple, dim=-1):
     m = seqlen / multiple
@@ -15,7 +15,7 @@ def pad_to_multiple(tensor, seqlen, multiple, dim=-1):
 class Autopadder(nn.Module):
     def __init__(self, net):
         super().__init__()
-        assert isinstance(net, (Reformer, ReformerLM)), 'Only accepts Reformer or ReformerLM classes'
+        assert isinstance(net, (LSHSelfAttention, Reformer, ReformerLM)), 'only modules LSHSelfAttention, Reformer, ReformerLM accepted'
         self.net = net
 
         reformer = net.reformer if isinstance(net, ReformerLM) else net
