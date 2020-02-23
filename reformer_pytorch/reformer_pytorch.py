@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.autograd import Function
 from functools import partial
 from itertools import chain
-from revtorch import ReversibleBlock, ReversibleSequence
+from reformer_pytorch.reversible import ReversibleBlock, ReversibleSequence
 
 #constants
 
@@ -537,10 +537,10 @@ class Reformer(nn.Module):
             if not twin_attention and ff_chunks > 1:
                 g = Chunk(ff_chunks, g, along_dim = -2)
 
-            blocks.append(ReversibleBlock(f, g, split_along_dim=-1, fix_random_seed=True))
+            blocks.append(nn.ModuleList([f, g]))
 
-        self.layers = ReversibleSequence(nn.ModuleList(blocks), eagerly_discard_variables = False)
-        self.layer_modules = list(chain(*[[m.f_block.fn, m.g_block.fn] for m in blocks]))
+        self.layers = ReversibleSequence(nn.ModuleList(blocks))
+        self.layer_modules = list(chain(*[m for m in blocks]))
 
     def set_reversible_args(self, *args, **kwargs):
         for module in self.layer_modules:
