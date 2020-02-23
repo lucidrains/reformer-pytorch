@@ -37,6 +37,7 @@ class Deterministic(nn.Module):
             return self.net(*args, **kwargs)
 
 # heavily inspired by https://github.com/RobinBruegger/RevTorch/blob/master/revtorch/revtorch.py
+# once multi-GPU is confirmed working, refactor and send PR back to source
 class ReversibleBlock(nn.Module):
     def __init__(self, f, g):
         super().__init__()
@@ -72,7 +73,6 @@ class ReversibleBlock(nn.Module):
             dx1 = dy1 + y1.grad
             del dy1
             y1.grad = None
-            y1.requires_grad = False
 
         with torch.enable_grad():
             x2.requires_grad = True
@@ -86,7 +86,6 @@ class ReversibleBlock(nn.Module):
             dx2 = dy2 + x2.grad
             del dy2
             x2.grad = None
-            x2.requires_grad = False
 
             x = torch.cat([x1, x2.detach()], dim=2)
             dx = torch.cat([dx1, dx2], dim=2)
@@ -110,9 +109,17 @@ class _ReversibleFunction(Function):
         return dy, None
 
 class ReversibleSequence(nn.Module):
-    def __init__(self, blocks):
+    def __init__(self, blocks, layer_dropout = 0.):
         super().__init__()
+        self.layer_dropout = layer_dropout
         self.blocks = nn.ModuleList([ReversibleBlock(f=f, g=g) for f, g in blocks])
 
     def forward(self, x):
-        return _ReversibleFunction.apply(x, self.blocks)
+        blocks = self.blocks
+
+        if self.layer_dropout > 0:
+            to_drop = torch.empty(len(self.blocks)).uniform_(0, 1) < self.layer_dropout
+            blocks = [block for block, drop in zip(self.blocks, to_drop) if not drop]
+            blocks = self.blocks[:1] if len(blocks) == 0 else blocks
+
+        return _ReversibleFunction.apply(x, blocks)

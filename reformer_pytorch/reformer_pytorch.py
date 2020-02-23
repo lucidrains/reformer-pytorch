@@ -490,16 +490,12 @@ class LSHSelfAttention(nn.Module):
 
 # feed forward
 
-class GELU(nn.Module):
-    def forward(self, x):
-        return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-
 class FeedForward(nn.Module):
     def __init__(self, dim, mult = 4):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(dim, dim * mult),
-            GELU(),
+            nn.GELU(),
             nn.Linear(dim * mult, dim))
 
     def forward(self, x):
@@ -508,7 +504,7 @@ class FeedForward(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0):
+    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., layer_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0):
         super().__init__()
         self.dim = dim
         self.depth = depth
@@ -539,7 +535,7 @@ class Reformer(nn.Module):
 
             blocks.append(nn.ModuleList([f, g]))
 
-        self.layers = ReversibleSequence(nn.ModuleList(blocks))
+        self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout)
         self.layer_modules = list(chain(*[m for m in blocks]))
 
     def set_reversible_args(self, *args, **kwargs):
@@ -554,14 +550,14 @@ class Reformer(nn.Module):
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0, emb_dim = None, return_embeddings = False, fixed_position_emb = False):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0, emb_dim = None, return_embeddings = False, fixed_position_emb = False):
         super().__init__()
         emb_dim = default(emb_dim, dim)
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
         self.pos_emb = FixedPositionEmbedding(emb_dim) if fixed_position_emb else nn.Embedding(max_seq_len, emb_dim)
         self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
 
-        self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, num_mem_kv = num_mem_kv)
+        self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, num_mem_kv = num_mem_kv)
         self.to_logits = identity if return_embeddings else nn.Linear(dim, num_tokens)
 
     def forward(self, x, **kwargs):

@@ -34,6 +34,7 @@ model = ReformerLM(
     max_seq_len = 8192,
     heads = 8,
     lsh_dropout = 0.1,
+    layer_dropout = 0.1,  # layer dropout from 'Reducing Transformer Depth on Demand' paper
     emb_dim = 128,        # embedding factorization for further memory savings
     causal = True,        # auto-regressive or not
     bucket_size = 64,     # average size of qk per bucket, 64 was recommended in paper
@@ -340,6 +341,16 @@ sample = model(x_eval) # (1, 275, 20000) - now use your favorite sampling strate
     year    = {2019},
     eprint  = {arXiv:1910.05895},
     doi     = {10.5281/zenodo.3525484},
+}
+```
+
+```bibtex
+@inproceedings{fan2020reducing,
+    title     ={Reducing Transformer Depth on Demand with Structured Dropout},
+    author    ={Angela Fan and Edouard Grave and Armand Joulin},
+    booktitle ={International Conference on Learning Representations},
+    year      ={2020},
+    url       ={https://openreview.net/forum?id=SylO2yStDr}
 }
 ```
 
