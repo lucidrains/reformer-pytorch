@@ -117,7 +117,7 @@ class ReversibleSequence(nn.Module):
     def forward(self, x):
         blocks = self.blocks
 
-        if self.layer_dropout > 0:
+        if self.training and self.layer_dropout > 0:
             to_drop = torch.empty(len(self.blocks)).uniform_(0, 1) < self.layer_dropout
             blocks = [block for block, drop in zip(self.blocks, to_drop) if not drop]
             blocks = self.blocks[:1] if len(blocks) == 0 else blocks

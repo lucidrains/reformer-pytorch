@@ -490,12 +490,19 @@ class LSHSelfAttention(nn.Module):
 
 # feed forward
 
+class GELU_(nn.Module):
+    def forward(self, x):
+        return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+
 class FeedForward(nn.Module):
     def __init__(self, dim, mult = 4):
         super().__init__()
+
+        GELU = nn.GELU() if hasattr(nn, 'GELU') else GELU_()
+
         self.net = nn.Sequential(
             nn.Linear(dim, dim * mult),
-            nn.GELU(),
+            GELU,
             nn.Linear(dim * mult, dim))
 
     def forward(self, x):
