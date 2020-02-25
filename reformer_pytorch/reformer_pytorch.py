@@ -528,7 +528,6 @@ class Reformer(nn.Module):
             get_ff = cache_fn(get_ff)
 
         blocks = []
-        attns = []
         norm_type = ScaleNorm if use_scale_norm else nn.LayerNorm
 
         for _ in range(depth):
@@ -542,16 +541,13 @@ class Reformer(nn.Module):
                 g = Chunk(ff_chunks, g, along_dim = -2)
 
             blocks.append(nn.ModuleList([f, g]))
-            attns.append(attn)
-            attns.append(parallel_net)
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout)
-        self.layer_modules = attns
+        self.settables = filter(lambda x: isinstance(x, SettableArgs), self.layers.modules())
 
     def set_reversible_args(self, *args, **kwargs):
-        for module in self.layer_modules:
-            if isinstance(module, SettableArgs):
-                module.set_args(*args, **kwargs)
+        for module in self.settables:
+            module.set_args(*args, **kwargs)
 
     def forward(self, x, **kwargs):
         x = torch.cat([x, x], dim = -1)
