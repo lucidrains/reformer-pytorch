@@ -543,6 +543,7 @@ class Reformer(nn.Module):
 
             blocks.append(nn.ModuleList([f, g]))
             attns.append(attn)
+            attns.append(parallel_net)
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout)
         self.layer_modules = attns
