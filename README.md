@@ -260,7 +260,7 @@ A lot of users are only interested in an auto-regressive language model (like GP
 import torch
 from torch import randint
 
-from reformer_pytorch.reformer_pytorch import ReformerLM
+from reformer_pytorch import ReformerLM
 from reformer_pytorch.generative_tools import TrainingWrapper
 
 model = ReformerLM(
@@ -291,10 +291,9 @@ model.train()
 loss = model(x_train, return_loss = True)
 loss.backward()
 
-# when evaluating, just execute as normal
-model.eval()
-x_eval = [ randint(0, 20000, (275,)) ]
-sample = model(x_eval) # (1, 275, 20000) - now use your favorite sampling strategy and repeat
+# when evaluating, just use the generate function, which will default to top_k sampling with temperature of 1.
+initial = torch.tensor([[0]]).long()
+sample = model.generate(initial, 100, temperature=1., filter_thres = 0.9) # (1, <=100) token ids
 ```
 
 ## Benchmarks

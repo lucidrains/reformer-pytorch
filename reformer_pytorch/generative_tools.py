@@ -6,13 +6,49 @@ from torch.nn.utils.rnn import pad_sequence
 from reformer_pytorch.reformer_pytorch import ReformerLM
 from reformer_pytorch.autopadder import Autopadder
 
+def top_p(logits, thres = 0.9):
+    sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+    cum_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+
+    sorted_indices_to_remove = cum_probs > thres
+    sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
+    sorted_indices_to_remove[:, 0] = 0
+
+    sorted_logits[sorted_indices_to_remove] = float('-inf')
+    return sorted_logits.gather(1, sorted_indices)
+
+def top_k(logits, thres = 0.9):
+    k = int((1 - thres) * logits.shape[-1])
+    val, ind = torch.topk(logits, k)
+    probs = torch.full_like(logits, float('-inf'))
+    probs.scatter_(1, ind, val)
+    return probs
+
 class TrainingWrapper(nn.Module):
     def __init__(self, net, ignore_index = -100, pad_value = 0):
         super().__init__()
         assert isinstance(net, ReformerLM), 'generative trainer wrapper can only accept ReformerLM class'
         self.pad_value = pad_value
         self.ignore_index = ignore_index
+
         self.net = Autopadder(net)
+        self.max_seq_len = net.max_seq_len
+
+    def generate(self, start_tokens, seq_len, max_seq_len = None, eos_token = None, temperature = 1., filter_logits_fn = top_k, filter_thres = 0.9, **kwargs):
+        self.net.eval()
+        out = start_tokens
+
+        for _ in range(seq_len):
+            x = out[:, -self.max_seq_len:]
+            logits = self.net(x)[:, -1, :]
+            filtered_logits = filter_logits_fn(logits, thres = filter_thres)
+            probs = F.softmax(filtered_logits / temperature, dim=-1)
+            sample = torch.multinomial(probs, 1)
+            out = torch.cat((out, sample), dim=-1)
+            if eos_token is not None and (sample == eos_token).all():
+                break
+
+        return out
 
     def forward(self, x, return_loss = False, **kwargs):
         pad = partial(pad_sequence, batch_first = True, padding_value = self.pad_value)
@@ -21,8 +57,6 @@ class TrainingWrapper(nn.Module):
             if not isinstance(x, torch.Tensor):
                 x = pad(x)
             return self.net(x, **kwargs)
-
-        assert self.training, 'you must be training in order to return the loss'
 
         if isinstance(x, torch.Tensor):
             xi = x[:, :-1]
