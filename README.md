@@ -292,8 +292,9 @@ loss = model(x_train, return_loss = True)
 loss.backward()
 
 # when evaluating, just use the generate function, which will default to top_k sampling with temperature of 1.
-initial = torch.tensor([[0]]).long()
-sample = model.generate(initial, 100, temperature=1., filter_thres = 0.9) # (1, <=100) token ids
+initial = torch.tensor([[0]]).long() # assume 0 is start token
+sample = model.generate(initial, 100, temperature=1., filter_thres = 0.9, eos_token = 1) # assume end token is 1, or omit and it will sample up to 100
+print(sample.shape) # (1, <=100) token ids
 ```
 
 ## Benchmarks

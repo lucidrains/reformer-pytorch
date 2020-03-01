@@ -1,4 +1,5 @@
 from reformer_pytorch import ReformerLM
+from reformer_pytorch.generative_tools import TrainingWrapper
 
 import random
 import tqdm
@@ -27,25 +28,6 @@ def cycle(loader):
         for data in loader:
             yield data
 
-def get_top_p(logits, top_p=0.9):
-    sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-    cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-
-    sorted_indices_to_remove = cumulative_probs > top_p
-    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-    sorted_indices_to_remove[..., 0] = 0
-
-    indices_to_remove = sorted_indices[sorted_indices_to_remove]
-    logits[indices_to_remove] = float('-inf')
-    return logits
-
-def sample_next_token(logits, top_p=0.9, temperature = 1.0):
-    logits = logits[0, -1, :] / temperature
-    filtered_logits = get_top_p(logits, top_p=top_p)
-
-    probs = F.softmax(filtered_logits, dim=-1)
-    return torch.multinomial(probs, 1)
-
 def decode_token(token):
     return str(chr(max(32, token)))
 
@@ -69,6 +51,7 @@ model = ReformerLM(
     use_full_attn = False # set this to true for comparison with full attention
 )
 
+model = TrainingWrapper(model)
 model.cuda()
 
 # prepare enwik8 data
@@ -87,7 +70,7 @@ class TextSamplerDataset(Dataset):
     def __getitem__(self, index):
         rand_start = torch.randint(0, self.data.size(0) - self.seq_len - 1, (1,))
         full_seq = self.data[rand_start: rand_start + self.seq_len + 1].long()
-        return full_seq[0:-1].cuda(), full_seq[1:].cuda()
+        return full_seq.cuda()
 
     def __len__(self):
         return self.data.size(0) // self.seq_len
@@ -103,16 +86,11 @@ optim = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 # training
 
-def get_batch_loss(model, data):
-    x, y = data
-    pred = model(x)
-    return F.cross_entropy(pred.transpose(1, 2), y, reduction='mean')
-
 for i in tqdm.tqdm(range(NUM_BATCHES), mininterval=10., desc='training'):
     model.train()
 
     for __ in range(GRADIENT_ACCUMULATE_EVERY):
-        loss = get_batch_loss(model, next(train_loader))
+        loss = model(next(train_loader), return_loss = True)
         loss.backward()
 
     print(f'training loss: {loss.item()}')
@@ -123,22 +101,15 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval=10., desc='training'):
     if i % VALIDATE_EVERY == 0:
         model.eval()
         with torch.no_grad():
-            loss = get_batch_loss(model, next(val_loader))
+            loss = model(next(val_loader), return_loss = True)
             print(f'validation loss: {loss.item()}')
 
     if i % GENERATE_EVERY == 0:
         model.eval()
-        with torch.no_grad():
-            inp, _ = random.choice(val_dataset)
-            output_str = ''
-            prime = decode_tokens(inp)
+        inp = random.choice(val_dataset)[:-1]
+        prime = decode_tokens(inp)
+        print(f'%s \n\n %s', (prime, '*' * 100))
 
-            print(f'%s \n\n %s', (prime, '*' * 100))
-
-            for _ in tqdm.tqdm(range(GENERATE_LENGTH), desc='generating'):
-                logits = model(inp[None, :])
-                next_token = sample_next_token(logits)
-                output_str += decode_token(next_token)
-                inp = torch.cat((inp[1:], next_token), dim=0)
-
-            print(output_str)
+        sample = model.generate(inp, GENERATE_LENGTH)
+        output_str = decode_tokens(sample)
+        print(output_str)

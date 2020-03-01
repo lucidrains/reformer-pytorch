@@ -35,6 +35,13 @@ class TrainingWrapper(nn.Module):
         self.max_seq_len = net.max_seq_len
 
     def generate(self, start_tokens, seq_len, max_seq_len = None, eos_token = None, temperature = 1., filter_logits_fn = top_k, filter_thres = 0.9, **kwargs):
+        num_dims = len(start_tokens.shape)
+
+        if num_dims == 1:
+            start_tokens = start_tokens[None, :]
+
+        b, t = start_tokens.shape
+
         self.net.eval()
         out = start_tokens
 
@@ -47,6 +54,11 @@ class TrainingWrapper(nn.Module):
             out = torch.cat((out, sample), dim=-1)
             if eos_token is not None and (sample == eos_token).all():
                 break
+
+        out = out[:, t:]
+
+        if num_dims == 1:
+            out = out.squeeze(0)
 
         return out
 
