@@ -46,7 +46,8 @@ model = ReformerLM(
     twin_attention = False, # both branches of the reversible network will be attention
     use_full_attn = False,  # use full self attention, for comparison
     full_attn_thres = 1024, # use full attention if context length is less than set value
-    use_scale_norm = False  # use scale norm from 'Transformers without tears' paper
+    use_scale_norm = False,  # use scale norm from 'Transformers without tears' paper
+    one_value_head = False   # use one set of values for all heads from 'One Write-Head Is All You Need'
 ).cuda()
 
 x = torch.randint(0, 20000, (1, 8192)).long().cuda()
@@ -351,6 +352,16 @@ print(sample.shape) # (1, <=100) token ids
     booktitle ={International Conference on Learning Representations},
     year      ={2020},
     url       ={https://openreview.net/forum?id=SylO2yStDr}
+}
+```
+
+```bibtex
+@article{Shazeer2019FastTD,
+    title   ={Fast Transformer Decoding: One Write-Head is All You Need},
+    author  ={Noam Shazeer},
+    journal ={ArXiv},
+    year    ={2019},
+    volume  ={abs/1911.02150}
 }
 ```
 
