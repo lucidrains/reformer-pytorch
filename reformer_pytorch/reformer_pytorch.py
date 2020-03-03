@@ -593,7 +593,7 @@ class Reformer(nn.Module):
             blocks.append(nn.ModuleList([f, g]))
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout)
-        self.settables = filter(lambda x: isinstance(x, SettableArgs), self.layers.modules())
+        self.settables = list(filter(lambda x: isinstance(x, SettableArgs), self.layers.modules()))
 
     def set_reversible_args(self, *args, **kwargs):
         for module in self.settables:
