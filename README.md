@@ -35,13 +35,13 @@ model = ReformerLM(
     heads = 8,
     lsh_dropout = 0.1,
     layer_dropout = 0.1,  # layer dropout from 'Reducing Transformer Depth on Demand' paper
-    emb_dim = 128,        # embedding factorization for further memory savings
     causal = True,        # auto-regressive or not
     bucket_size = 64,     # average size of qk per bucket, 64 was recommended in paper
     n_hashes = 4,         # 4 is permissible per author, 8 is the best but slower
+    emb_dim = 128,        # embedding factorization for further memory savings
     ff_chunks = 200,      # number of chunks for feedforward layer, make higher if there are memory issues
+    attn_chunks = 8,      # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
     weight_tie = False,   # tie parameters of each layer for no memory per additional depth
-    attn_chunks = 8,        # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
     num_mem_kv = 128,       # persistent learned memory key values, from all-attention paper
     twin_attention = False, # both branches of the reversible network will be attention
     use_full_attn = False,  # use full self attention, for comparison
@@ -113,6 +113,33 @@ out, attn, buckets = attn(qk, v) # (10, 1024, 128)
 # buckets will contain the bucket number (post-argmax) of each token of each batch
 ```
 
+## Positional Embeddings
+
+<a href="https://github.com/AranKomat">Aran</a> has informed me that the Reformer team used axial position embeddings with great results on longer sequences. I tested it out and indeed it works very well! If you choose to use it, you will have to pass in 2 additional hyperparameters in addition to turning on a flag.
+
+It is highly recommended that you turn this on, especially if you are working with images. The Reformer team used an axial shape that matches the image dimensions of Imagenet `(64, 64, 3)`.
+
+```python
+import torch
+from reformer_pytorch import ReformerLM
+
+model = ReformerLM(
+    num_tokens= 20000,
+    dim = 1024,
+    depth = 12,
+    max_seq_len = 8192,
+    ff_chunks = 8,
+    attn_chunks = 2,
+    causal = True,
+    axial_position_emb = True,
+    axial_position_shape = (128, 64),  # the shape must multiply up to the max_seq_len (128 x 64 = 8192)
+    axial_position_dims = (512, 512)   # the dims must sum up to the model dimensions (512 + 512 = 1024)
+)
+
+x = torch.randint(0, 20000, (1, 8192)).long()
+y = model(x) # (1, 8192, 20000)
+```
+
 ## Examples
 
 A full Reformer sequence → sequence, say translation
@@ -171,6 +198,9 @@ encoder = Reformer(
     depth = 6,
     heads = 8,
     max_seq_len = 4096,
+    axial_position_emb = True,
+    axial_position_shape = (32, 32),
+    axial_position_dims = (256, 256)
 )
 
 decoder = ReformerLM(
@@ -191,31 +221,6 @@ visual_emb = visual_emb.view(1, c, h * w).transpose(1, 2) # nchw to nte
 
 enc_keys = encoder(visual_emb)
 yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
-```
-
-## Positional Embeddings
-
-A researcher has informed me that the Reformer team used axial position embeddings with great results on longer sequences. I tested it out and indeed it works very well! If you choose to use it, you will have to pass in 2 additional hyperparameters in addition to turning on a flag.
-
-```python
-import torch
-from reformer_pytorch import ReformerLM
-
-model = ReformerLM(
-    num_tokens= 20000,
-    dim = 1024,
-    depth = 12,
-    max_seq_len = 8192,
-    ff_chunks = 8,
-    attn_chunks = 2,
-    causal = True,
-    axial_position_emb = True,
-    axial_position_shape = (128, 64),  # the shape must multiply up to the max_seq_len (128 x 64 = 8192)
-    axial_position_dims = (512, 512)   # the dims must sum up to the model dimensions (512 + 512 = 1024)
-)
-
-x = torch.randint(0, 20000, (1, 8192)).long()
-y = model(x) # (1, 8192, 20000)
 ```
 
 ## Research
