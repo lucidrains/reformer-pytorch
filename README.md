@@ -193,6 +193,31 @@ enc_keys = encoder(visual_emb)
 yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 ```
 
+## Positional Embeddings
+
+A researcher has informed me that the Reformer team used axial position embeddings with great results on longer sequences. I tested it out and indeed it works very well! If you choose to use it, you will have to pass in 2 additional hyperparameters in addition to turning on a flag.
+
+```python
+import torch
+from reformer_pytorch import ReformerLM
+
+model = ReformerLM(
+    num_tokens= 20000,
+    dim = 1024,
+    depth = 12,
+    max_seq_len = 8192,
+    ff_chunks = 8,
+    attn_chunks = 2,
+    causal = True,
+    axial_position_emb = True,
+    axial_position_shape = (128, 64),  # the shape must multiply up to the max_seq_len (128 x 64 = 8192)
+    axial_position_dims = (512, 512)   # the dims must sum up to the model dimensions (512 + 512 = 1024)
+)
+
+x = torch.randint(0, 20000, (1, 8192)).long()
+y = model(x) # (1, 8192, 20000)
+```
+
 ## Research
 
 To access the attention weights and bucket distribution, simply wrap the instantiated model with the `Recorder` wrapper class.
