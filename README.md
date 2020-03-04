@@ -328,10 +328,6 @@ sample = model.generate(initial, 100, temperature=1., filter_thres = 0.9, eos_to
 print(sample.shape) # (1, <=100) token ids
 ```
 
-## Benchmarks
-
-- <a href="https://github.com/zbloss">Zachary Bloss</a> has kindly added code for training GLUE under `examples/glue`
-
 ## Todo
 
 1. ~~Make it so Reformer can be used as decoder where queries only attend to fed key/values~~
