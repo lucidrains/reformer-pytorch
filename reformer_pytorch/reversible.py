@@ -49,8 +49,8 @@ class ReversibleBlock(nn.Module):
         y1, y2 = None, None
 
         with torch.no_grad():
-            y1 = x1 + self.f(x2, record_rng=True)
-            y2 = x2 + self.g(y1, record_rng=True)
+            y1 = x1 + self.f(x2, record_rng=self.training)
+            y2 = x2 + self.g(y1, record_rng=self.training)
 
         return torch.cat([y1, y2], dim=2)
 
