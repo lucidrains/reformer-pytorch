@@ -615,11 +615,11 @@ class ReformerLM(nn.Module):
         self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
 
         if axial_position_emb:
-            self.pos_emb = AxialPositionalEncoding(dim, max_seq_len, axial_position_shape, axial_position_dims)
+            self.pos_emb = AxialPositionalEncoding(emb_dim, max_seq_len, axial_position_shape, axial_position_dims)
         elif fixed_position_emb:
-            self.pos_emb = FixedPositionalEmbedding(dim)
+            self.pos_emb = FixedPositionalEmbedding(emb_dim)
         else:
-            self.pos_emb = AbsolutePositionalEmbedding(dim, max_seq_len)
+            self.pos_emb = AbsolutePositionalEmbedding(emb_dim, max_seq_len)
 
         self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head)
         self.to_logits = identity if return_embeddings else nn.Linear(dim, num_tokens)
