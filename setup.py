@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
   name = 'reformer_pytorch',
   packages = find_packages(exclude=['examples', 'pretraining']),
-  version = '0.16.3',
+  version = '0.16.4',
   license='MIT',
   description = 'Reformer, the Efficient Transformer, Pytorch',
   author = 'Phil Wang',
