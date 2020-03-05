@@ -331,10 +331,10 @@ print(sample.shape) # (1, <=100) token ids
 
 ## Todo
 
-1. ~~Make it so Reformer can be used as decoder where queries only attend to fed key/values~~
-2. ~~All-attention learned memory key values~~
-3. ~~Option to switch to full shared-qk attention at shorter sequence lengths (< 2048 or a set threshold)~~
-4. Recurrence like Transformer XL
+1. ✓ ~~Make it so Reformer can be used as decoder where queries only attend to fed key/values~~
+2. ✓ ~~All-attention learned memory key values~~
+3. ✓ ~~Option to switch to full shared-qk attention at shorter sequence lengths (< 2048 or a set threshold)~~
+4. ✕ ~~Recurrence like Transformer XL~~ <a href="https://github.com/AranKomat">Aran</a> brought up the point that it would be impossible to hold all the hidden activations in memory. This idea has been scrapped.
 
 ## Citations
 ```bibtex
