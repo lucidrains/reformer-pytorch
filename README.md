@@ -45,6 +45,7 @@ model = ReformerLM(
     num_mem_kv = 128,       # persistent learned memory key values, from all-attention paper
     twin_attention = False, # both branches of the reversible network will be attention
     full_attn_thres = 1024, # use full attention if context length is less than set value
+    reverse_thres = 1024,   # turn off reversibility for 2x speed for sequence lengths shorter than designated value
     use_scale_norm = False,  # use scale norm from 'Transformers without tears' paper
     one_value_head = False,  # use one set of values for all heads from 'One Write-Head Is All You Need'
     use_full_attn = False    # only turn on this flag to override and turn on full attention for all sequence lengths. for comparison with LSH to show that it is working
