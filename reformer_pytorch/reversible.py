@@ -127,18 +127,18 @@ class ReversibleSequence(nn.Module):
         self.reverse_thres = reverse_thres
 
         self.blocks = nn.ModuleList([ReversibleBlock(f=f, g=g) for f, g in blocks])
-        self.irreversible_fn = nn.Sequential(*[IrreversibleBlock(f=f, g=g) for f, g in blocks])
+        self.irrev_blocks = nn.ModuleList([IrreversibleBlock(f=f, g=g) for f, g in blocks])
 
     def forward(self, x):
-        t = x.shape[1]
-        blocks = self.blocks
+        reverse = x.shape[1] > self.reverse_thres
+        blocks = self.blocks if reverse else self.irrev_blocks
 
         if self.training and self.layer_dropout > 0:
             to_drop = torch.empty(len(self.blocks)).uniform_(0, 1) < self.layer_dropout
             blocks = [block for block, drop in zip(self.blocks, to_drop) if not drop]
             blocks = self.blocks[:1] if len(blocks) == 0 else blocks
 
-        if t <= self.reverse_thres:
-            return self.irreversible_fn(x)
+        if not reverse:
+            return nn.Sequential(*blocks)(x)
 
         return _ReversibleFunction.apply(x, blocks)
