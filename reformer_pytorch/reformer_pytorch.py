@@ -74,9 +74,9 @@ class WithNorm(nn.Module):
         super().__init__()
         self.norm = norm_class(dim)
         self.fn = fn
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x = self.norm(x)
-        return self.fn(x)
+        return self.fn(x, **kwargs)
 
 class Chunk(nn.Module):
     def __init__(self, chunks, fn, along_dim = -1):
@@ -88,20 +88,6 @@ class Chunk(nn.Module):
     def forward(self, x):
         chunks = x.chunk(self.chunks, dim = self.dim)
         return torch.cat([self.fn(c) for c in chunks], dim = self.dim)
-
-class SettableArgs(nn.Module):
-    def __init__(self, fn, *args, **kwargs):
-        super().__init__()
-        self.args = args
-        self.kwargs = kwargs
-        self.fn = fn
-
-    def set_args(self, *args, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
-
-    def forward(self, x):
-        return self.fn(x, *self.args, **self.kwargs)
 
 # LSH attention as described in https://openreview.net/pdf?id=rkgNKkHtvB
 # adapted from trax, stripped to what paper said needed to work
@@ -489,6 +475,7 @@ class LSHSelfAttention(nn.Module):
         attn_fn = self.lsh_attn if not use_full_attn else self.full_attn
         partial_attn_fn = partial(attn_fn, query_len = t)
         attn_fn_in_chunks = process_inputs_chunk(partial_attn_fn, chunks = self.attn_chunks)
+
         out, attn, buckets = attn_fn_in_chunks(qk, v, **masks)
         out = split_heads(out).view(b, t, e)
 
@@ -585,9 +572,11 @@ class Reformer(nn.Module):
 
         self.bucket_size = bucket_size
         self.num_mem_kv = num_mem_kv
+
+        self.twin_attention = twin_attention
         self.full_attn_thres = full_attn_thres
 
-        get_attn = lambda: SettableArgs(LSHSelfAttention(dim, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, post_attn_dropout = post_attn_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, one_value_head = one_value_head))
+        get_attn = lambda: LSHSelfAttention(dim, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, post_attn_dropout = post_attn_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, one_value_head = one_value_head)
         get_ff = lambda: FeedForward(dim, dropout = ff_dropout)
 
         if weight_tie:
@@ -610,16 +599,11 @@ class Reformer(nn.Module):
             blocks.append(nn.ModuleList([f, g]))
 
         self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout, reverse_thres = reverse_thres)
-        self.settables = list(filter(lambda x: isinstance(x, SettableArgs), self.layers.modules()))
-
-    def set_reversible_args(self, *args, **kwargs):
-        for module in self.settables:
-            module.set_args(*args, **kwargs)
 
     def forward(self, x, **kwargs):
         x = torch.cat([x, x], dim = -1)
-        self.set_reversible_args(**kwargs)
-        x = self.layers(x)
+        arg_route = (True, self.twin_attention)
+        x = self.layers(x, arg_route = arg_route, **kwargs)
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
 class ReformerLM(nn.Module):

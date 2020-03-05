@@ -44,17 +44,17 @@ class ReversibleBlock(nn.Module):
         self.f = Deterministic(f)
         self.g = Deterministic(g)
 
-    def forward(self, x):
+    def forward(self, x, f_args = {}, g_args = {}):
         x1, x2 = torch.chunk(x, 2, dim=2)
         y1, y2 = None, None
 
         with torch.no_grad():
-            y1 = x1 + self.f(x2, record_rng=self.training)
-            y2 = x2 + self.g(y1, record_rng=self.training)
+            y1 = x1 + self.f(x2, record_rng=self.training, **f_args)
+            y2 = x2 + self.g(y1, record_rng=self.training, **g_args)
 
         return torch.cat([y1, y2], dim=2)
 
-    def backward_pass(self, y, dy):
+    def backward_pass(self, y, dy, f_args = {}, g_args = {}):
         y1, y2 = torch.chunk(y, 2, dim=2)
         del y
 
@@ -63,7 +63,7 @@ class ReversibleBlock(nn.Module):
 
         with torch.enable_grad():
             y1.requires_grad = True
-            gy1 = self.g(y1, set_rng=True)
+            gy1 = self.g(y1, set_rng=True, **g_args)
             torch.autograd.backward(gy1, dy2)
 
         with torch.no_grad():
@@ -76,7 +76,7 @@ class ReversibleBlock(nn.Module):
 
         with torch.enable_grad():
             x2.requires_grad = True
-            fx2 = self.f(x2, set_rng=True)
+            fx2 = self.f(x2, set_rng=True, **f_args)
             torch.autograd.backward(fx2, dx1, retain_graph=True)
 
         with torch.no_grad():
@@ -98,17 +98,18 @@ class IrreversibleBlock(nn.Module):
         self.f = f
         self.g = g
 
-    def forward(self, x):
+    def forward(self, x, f_args, g_args):
         x1, x2 = torch.chunk(x, 2, dim=2)
-        y1 = x1 + self.f(x2)
-        y2 = x2 + self.g(y1)
+        y1 = x1 + self.f(x2, **f_args)
+        y2 = x2 + self.g(y1, **g_args)
         return torch.cat([y1, y2], dim=2)
 
 class _ReversibleFunction(Function):
     @staticmethod
-    def forward(ctx, x, blocks):
+    def forward(ctx, x, blocks, kwargs):
+        ctx.kwargs = kwargs
         for block in blocks:
-            x = block(x)
+            x = block(x, **kwargs)
         ctx.y = x.detach()
         ctx.blocks = blocks
         return x
@@ -116,9 +117,10 @@ class _ReversibleFunction(Function):
     @staticmethod
     def backward(ctx, dy):
         y = ctx.y
+        kwargs = ctx.kwargs
         for block in ctx.blocks[::-1]:
-            y, dy = block.backward_pass(y, dy)
-        return dy, None
+            y, dy = block.backward_pass(y, dy, **kwargs)
+        return dy, None, None
 
 class ReversibleSequence(nn.Module):
     def __init__(self, blocks, layer_dropout = 0., reverse_thres = 0):
@@ -129,7 +131,7 @@ class ReversibleSequence(nn.Module):
         self.blocks = nn.ModuleList([ReversibleBlock(f=f, g=g) for f, g in blocks])
         self.irrev_blocks = nn.ModuleList([IrreversibleBlock(f=f, g=g) for f, g in blocks])
 
-    def forward(self, x):
+    def forward(self, x, arg_route = (True, True), **kwargs):
         reverse = x.shape[1] > self.reverse_thres
         blocks = self.blocks if reverse else self.irrev_blocks
 
@@ -138,7 +140,12 @@ class ReversibleSequence(nn.Module):
             blocks = [block for block, drop in zip(self.blocks, to_drop) if not drop]
             blocks = self.blocks[:1] if len(blocks) == 0 else blocks
 
-        if not reverse:
-            return nn.Sequential(*blocks)(x)
+        f_args, g_args = map(lambda route: kwargs if route else {}, arg_route)
+        block_kwargs = {'f_args': f_args, 'g_args': g_args}
 
-        return _ReversibleFunction.apply(x, blocks)
+        if not reverse:
+            for block in blocks:
+                x = block(x, **block_kwargs)
+            return x
+
+        return _ReversibleFunction.apply(x, blocks, block_kwargs)
