@@ -143,6 +143,10 @@ x = torch.randint(0, 20000, (1, 8192)).long()
 y = model(x) # (1, 8192, 20000)
 ```
 
+## Training
+
+Since version `0.17.0`, and some corrections to the reversible network, Reformer Pytorch is compatible with Microsoft's Deepspeed! If you have multiple local GPUs, you can follow the instructions / example <a href="https://github.com/lucidrains/reformer-pytorch/tree/master/examples/enwik8_deepspeed">here</a>.
+
 ## Examples
 
 A full Reformer sequence → sequence, say translation
