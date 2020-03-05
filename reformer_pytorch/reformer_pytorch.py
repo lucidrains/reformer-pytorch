@@ -26,10 +26,14 @@ def batched_index_select(values, indices):
     last_dim = values.shape[-1]
     return values.gather(1, indices[:, :, None].expand(-1, -1, last_dim))
 
-def process_inputs_chunk(fn, *args, chunks=1, dim=0):
-    chunked_inputs = list(map(lambda x: x.chunk(chunks, dim=dim), args))
-    outputs = [fn(*input_pair) for input_pair in zip(*chunked_inputs)]
-    return tuple(map(lambda x: torch.cat(x, dim=dim), zip(*outputs)))
+def process_inputs_chunk(fn, chunks=1, dim=0):
+    def inner_fn(*args, **kwargs):
+        keys, values, len_args = kwargs.keys(), kwargs.values(), len(args)
+        chunked_args = list(zip(*map(lambda x: x.chunk(chunks, dim=dim), list(args) + list(values))))
+        all_args = map(lambda x: (x[:len_args], dict(zip(keys, x[len_args:]))), chunked_args)
+        outputs = [fn(*c_args, **c_kwargs) for c_args, c_kwargs in all_args]
+        return tuple(map(lambda x: torch.cat(x, dim=dim), zip(*outputs)))
+    return inner_fn
 
 def chunked_sum(tensor, chunks=1):
     *orig_size, last_dim = tensor.shape
@@ -416,7 +420,7 @@ class LSHSelfAttention(nn.Module):
 
         self.dim = dim
         self.heads = heads
-        self.attn_chunks = attn_chunks
+        self.attn_chunks = default(attn_chunks, 1)
 
         self.v_head_repeats = (heads if one_value_head else 1)
         v_dim = dim // self.v_head_repeats
@@ -464,17 +468,24 @@ class LSHSelfAttention(nn.Module):
         qk = merge_heads(qk)
         v = merge_heads(v)
 
-        mask = None
+        masks = {}
         if input_mask is not None or context_mask is not None:
             default_mask = torch.tensor([True], device=device)
             i_mask = default(input_mask, default_mask.expand(b, t))
             m_mask = default_mask.expand(b, m)
             c_mask = default(context_mask, default_mask.expand(b, c))
             mask = torch.cat((i_mask, m_mask, c_mask), dim=1)
+            mask = mask[:, None, :].expand(b, h, kv_len).reshape(b * h, kv_len)
+            masks['input_mask'] = mask
+
+        if input_attn_mask is not None:
+            input_attn_mask = input_attn_mask[:, None, :, :].expand(b, h, t, t).reshape(b * h, t, t)
+            masks['input_attn_mask'] = input_attn_mask
 
         attn_fn = self.lsh_attn if not use_full_attn else self.full_attn
-        partial_attn_fn = partial(attn_fn, query_len = t, input_mask = mask, input_attn_mask = input_attn_mask)
-        out, attn, buckets = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
+        partial_attn_fn = partial(attn_fn, query_len = t)
+        attn_fn_in_chunks = process_inputs_chunk(partial_attn_fn, chunks = self.attn_chunks)
+        out, attn, buckets = attn_fn_in_chunks(qk, v, **masks)
         out = split_heads(out).view(b, t, e)
 
         if self.callback is not None:
