@@ -13,16 +13,8 @@
       "weight_decay": 3e-7
     }
   },
-  "scheduler": {
-    "type": "WarmupLR",
-    "params": {
-      "warmup_min_lr": 0,
-      "warmup_max_lr": 0.001,
-      "warmup_num_steps": 1000
-    }
-  },
   "fp16": {
-    "enabled": true,
+    "enabled": false,
     "loss_scale": 0,
     "loss_scale_window": 1000,
     "hysteresis": 2,
