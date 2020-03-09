@@ -99,7 +99,7 @@ class LSHAttention(nn.Module):
                   dropout = 0.,
                   bucket_size = 64,
                   n_hashes = 8,
-                  n_local_attn_hashes = 0,
+                  add_local_attn_hash = False,
                   causal = False,
                   allow_duplicate_attention = True,
                   attend_across_buckets = True,
@@ -122,7 +122,7 @@ class LSHAttention(nn.Module):
         self.bucket_size = bucket_size
 
         self.n_hashes = n_hashes
-        self.n_local_attn_hashes = n_local_attn_hashes
+        self.add_local_attn_hash = add_local_attn_hash
 
         self._allow_duplicate_attention = allow_duplicate_attention
         self._attend_across_buckets = attend_across_buckets
@@ -193,11 +193,11 @@ class LSHAttention(nn.Module):
         # We use the same vector as both a query and a key.
         assert int(buckets.shape[1]) == self.n_hashes * seqlen
 
-        if self.n_local_attn_hashes > 0:
-            local_buckets = torch.full((batch_size, seqlen * self.n_local_attn_hashes), n_buckets, device=device, dtype=torch.long)
+        if self.add_local_attn_hash:
+            local_buckets = torch.full((batch_size, seqlen), n_buckets, device=device, dtype=torch.long)
             buckets = torch.cat((buckets, local_buckets), dim=1)
 
-        total_hashes = self.n_hashes + self.n_local_attn_hashes
+        total_hashes = self.n_hashes + int(self.add_local_attn_hash)
 
         ticker = torch.arange(total_hashes * seqlen, device=device).unsqueeze(0).expand_as(buckets)
         buckets_and_t = seqlen * buckets + (ticker % seqlen)
@@ -413,7 +413,7 @@ class FullQKAttention(nn.Module):
 # Shared qk attention, using either full or LSH attention
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, n_local_attn_hashes = 0, causal = False, attn_chunks = 1, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, one_value_head = False, use_full_attn = False, full_attn_thres = None, return_attn = False, post_attn_dropout = 0., dropout = 0., **kwargs):
+    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, add_local_attn_hash = False, causal = False, attn_chunks = 1, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, one_value_head = False, use_full_attn = False, full_attn_thres = None, return_attn = False, post_attn_dropout = 0., dropout = 0., **kwargs):
         super().__init__()
         assert dim % heads == 0, 'dimensions must be divisible by number of heads'
 
@@ -429,7 +429,7 @@ class LSHSelfAttention(nn.Module):
         self.to_out = nn.Linear(dim, dim)
 
         self.bucket_size = bucket_size
-        self.lsh_attn = LSHAttention(bucket_size=bucket_size, n_hashes=n_hashes, n_local_attn_hashes = n_local_attn_hashes, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, return_attn = return_attn, dropout = dropout, **kwargs)
+        self.lsh_attn = LSHAttention(bucket_size=bucket_size, n_hashes=n_hashes, add_local_attn_hash = add_local_attn_hash, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, return_attn = return_attn, dropout = dropout, **kwargs)
         self.full_attn = FullQKAttention(causal = causal, dropout = dropout)
         self.post_attn_dropout = nn.Dropout(post_attn_dropout)
 
@@ -575,7 +575,7 @@ class AxialPositionalEncoding(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, n_local_attn_hashes = 0, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., post_attn_dropout = 0., layer_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False):
+    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, add_local_attn_hash = False, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., post_attn_dropout = 0., layer_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False):
         super().__init__()
         self.dim = dim
         self.depth = depth
@@ -586,7 +586,7 @@ class Reformer(nn.Module):
         self.twin_attention = twin_attention
         self.full_attn_thres = full_attn_thres
 
-        get_attn = lambda: LSHSelfAttention(dim, heads, bucket_size, n_hashes, n_local_attn_hashes = n_local_attn_hashes, causal = causal, dropout = lsh_dropout, post_attn_dropout = post_attn_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, one_value_head = one_value_head)
+        get_attn = lambda: LSHSelfAttention(dim, heads, bucket_size, n_hashes, add_local_attn_hash = add_local_attn_hash, causal = causal, dropout = lsh_dropout, post_attn_dropout = post_attn_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, one_value_head = one_value_head)
         get_ff = lambda: FeedForward(dim, dropout = ff_dropout)
 
         if weight_tie:
@@ -617,7 +617,7 @@ class Reformer(nn.Module):
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, n_local_attn_hashes = 0, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, fixed_position_emb = False, axial_position_emb = False, axial_position_shape = (), axial_position_dims = ()):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, add_local_attn_hash = False, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, fixed_position_emb = False, axial_position_emb = False, axial_position_shape = (), axial_position_dims = ()):
         super().__init__()
         emb_dim = default(emb_dim, dim)
         self.max_seq_len = max_seq_len
@@ -632,7 +632,7 @@ class ReformerLM(nn.Module):
         else:
             self.pos_emb = AbsolutePositionalEmbedding(emb_dim, max_seq_len)
 
-        self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, n_local_attn_hashes = n_local_attn_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, ff_dropout = ff_dropout, post_attn_dropout = 0., layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head)
+        self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, add_local_attn_hash = add_local_attn_hash, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, ff_dropout = ff_dropout, post_attn_dropout = 0., layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head)
         self.to_logits = identity if return_embeddings else nn.Linear(dim, num_tokens)
 
     def forward(self, x, **kwargs):
