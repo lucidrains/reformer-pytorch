@@ -189,11 +189,12 @@ class LSHAttention(nn.Module):
         n_buckets = seqlen // self.bucket_size
 
         buckets = self.hash_vectors(n_buckets, qk)
+
         # We use the same vector as both a query and a key.
         assert int(buckets.shape[1]) == self.n_hashes * seqlen
 
         if self.n_local_attn_hashes > 0:
-            local_buckets = torch.zeros((batch_size, seqlen * self.n_local_attn_hashes), device = device, dtype=torch.long)
+            local_buckets = torch.full((batch_size, seqlen * self.n_local_attn_hashes), n_buckets, device=device, dtype=torch.long)
             buckets = torch.cat((buckets, local_buckets), dim=1)
 
         total_hashes = self.n_hashes + self.n_local_attn_hashes
