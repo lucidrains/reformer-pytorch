@@ -204,10 +204,7 @@ encoder = Reformer(
     dim = 512,
     depth = 6,
     heads = 8,
-    max_seq_len = 4096,
-    axial_position_emb = True,
-    axial_position_shape = (32, 32),
-    axial_position_dims = (256, 256)
+    max_seq_len = 4096
 )
 
 decoder = ReformerLM(
