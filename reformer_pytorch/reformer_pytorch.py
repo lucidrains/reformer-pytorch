@@ -530,7 +530,7 @@ class AbsolutePositionalEmbedding(nn.Module):
 class FixedPositionalEmbedding(nn.Module):
     def __init__(self, dim):
         super().__init__()
-        inv_freq = 1 / (10000 ** (torch.arange(0, dim, 2) / dim))
+        inv_freq = 1. / (10000 ** (torch.arange(0, dim, 2).float() / dim))
         self.register_buffer('inv_freq', inv_freq)
 
     def forward(self, x):
