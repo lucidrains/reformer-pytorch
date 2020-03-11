@@ -534,8 +534,8 @@ class FixedPositionalEmbedding(nn.Module):
         self.register_buffer('inv_freq', inv_freq)
 
     def forward(self, x):
-        t = torch.arange(x.shape[1], device=x.device)
-        sinusoid_inp = torch.einsum("i,j->ij", t.float(), self.inv_freq)
+        t = torch.arange(x.shape[1], device=x.device).type(self.inv_freq.type())
+        sinusoid_inp = torch.einsum("i,j->ij", t, self.inv_freq)
         emb = torch.cat((sinusoid_inp.sin(), sinusoid_inp.cos()), dim=-1)
         return emb[None, :, :]
 
