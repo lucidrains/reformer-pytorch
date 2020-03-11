@@ -303,7 +303,7 @@ class LSHAttention(nn.Module):
 
             b_locs1 = b_locs[:, :, :, None, :total_hashes]
 
-            bq_locs = b_locs1.expand(b_locs.shape[:3] + (2, stotal_hashes))
+            bq_locs = b_locs1.expand(b_locs.shape[:3] + (2, total_hashes))
             bq_locs = torch.reshape(bq_locs, b_locs.shape)
             bkv_locs = look_one_back(b_locs)
 
