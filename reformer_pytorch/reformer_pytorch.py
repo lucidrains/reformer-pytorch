@@ -14,9 +14,6 @@ TOKEN_SELF_ATTN_VALUE = -5e4 # carefully set for half precision to work
 
 # helper fns
 
-def identity(x):
-    return x
-
 def sort_key_val(t1, t2, dim=-1):
     values, indices = t1.sort(dim=dim)
     t2 = t2.expand_as(t1)
@@ -59,10 +56,29 @@ def max_neg_value(tensor):
 
 # helper classes
 
+class Identity(nn.Module):
+    def forward(self, x):
+        return x
+
+class MatrixMultiply(nn.Module):
+    def __init__(self, tensor, transpose = False, normalize = False):
+        super().__init__()
+        self.tensor = tensor
+        self.transpose = transpose
+        self.normalize = normalize
+
+    def forward(self, x):
+        tensor = self.tensor
+        if self.normalize:
+            tensor = F.normalize(tensor, dim=-1)
+        if self.transpose:
+            tensor = tensor.t()
+        return x @ tensor
+
 class ScaleNorm(nn.Module):
     def __init__(self, dim, eps=1e-5):
         super().__init__()
-        self.g = nn.Parameter(torch.ones(1, requires_grad=True))
+        self.g = nn.Parameter(torch.ones(1))
         self.eps = eps
 
     def forward(self, x):
@@ -522,6 +538,7 @@ class AbsolutePositionalEmbedding(nn.Module):
     def __init__(self, dim, max_seq_len):
         super().__init__()
         self.emb = nn.Embedding(max_seq_len, dim)
+        self.emb.weight.data.uniform_(-0.01, 0.01)
 
     def forward(self, x):
         t = torch.arange(x.shape[1], device=x.device)
@@ -617,13 +634,15 @@ class Reformer(nn.Module):
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, add_local_attn_hash = False, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, fixed_position_emb = False, axial_position_emb = False, axial_position_shape = (), axial_position_dims = ()):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, add_local_attn_hash = False, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, weight_tie_embedding = False, fixed_position_emb = False, axial_position_emb = False, axial_position_shape = (), axial_position_dims = ()):
         super().__init__()
         emb_dim = default(emb_dim, dim)
         self.max_seq_len = max_seq_len
 
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
-        self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
+        self.token_emb.weight.data.uniform_(-0.01, 0.01)
+
+        self.to_model_dim = Identity() if emb_dim == dim else nn.Linear(emb_dim, dim)
 
         if axial_position_emb:
             self.pos_emb = AxialPositionalEncoding(emb_dim, max_seq_len, axial_position_shape, axial_position_dims)
@@ -633,7 +652,15 @@ class ReformerLM(nn.Module):
             self.pos_emb = AbsolutePositionalEmbedding(emb_dim, max_seq_len)
 
         self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, add_local_attn_hash = add_local_attn_hash, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, ff_dropout = ff_dropout, post_attn_dropout = 0., layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head)
-        self.to_logits = identity if return_embeddings else nn.Linear(dim, num_tokens)
+
+        if return_embeddings:
+            self.out = Identity()
+            return
+
+        self.out = nn.Sequential(
+            nn.Linear(dim, emb_dim) if emb_dim != dim else Identity(),
+            nn.Linear(emb_dim, num_tokens) if not weight_tie_embedding else MatrixMultiply(self.token_emb.weight, transpose=True, normalize=True)
+        )
 
     def forward(self, x, **kwargs):
         x = self.token_emb(x)
@@ -641,4 +668,4 @@ class ReformerLM(nn.Module):
 
         x = self.to_model_dim(x)
         x = self.reformer(x, **kwargs)
-        return self.to_logits(x)
+        return self.out(x)

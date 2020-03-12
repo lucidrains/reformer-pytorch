@@ -43,13 +43,14 @@ model = ReformerLM(
     emb_dim = 128,        # embedding factorization for further memory savings
     ff_chunks = 200,      # number of chunks for feedforward layer, make higher if there are memory issues
     attn_chunks = 8,      # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
-    weight_tie = False,   # tie parameters of each layer for no memory per additional depth
     num_mem_kv = 128,       # persistent learned memory key values, from all-attention paper
     twin_attention = False, # both branches of the reversible network will be attention
     full_attn_thres = 1024, # use full attention if context length is less than set value
     reverse_thres = 1024,   # turn off reversibility for 2x speed for sequence lengths shorter or equal to the designated value
     use_scale_norm = False,  # use scale norm from 'Transformers without tears' paper
     one_value_head = False,  # use one set of values for all heads from 'One Write-Head Is All You Need'
+    weight_tie = False,           # tie parameters of each layer for no memory per additional depth
+    weight_tie_embedding = False, # use token embedding for projection of output, some papers report better results
     use_full_attn = False    # only turn on this flag to override and turn on full attention for all sequence lengths. for comparison with LSH to show that it is working
 ).cuda()
 

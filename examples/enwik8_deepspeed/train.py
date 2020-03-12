@@ -60,7 +60,6 @@ model = ReformerLM(
     heads = 8,
     bucket_size = 64,
     n_hashes = 4,
-    n_local_attn_hashes = 1,
     ff_chunks = 10,
     lsh_dropout = 0.1,
     weight_tie = True,
