@@ -228,6 +228,30 @@ enc_keys = encoder(visual_emb)
 yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 ```
 
+## Customizing Feedforward
+
+By default, the activation function is `GELU`. If you would like an alternative activation function, you can pass in the class to the keyword `ff_activation`.
+
+```python
+import torch
+from reformer_pytorch import ReformerLM
+from torch import nn
+
+model = ReformerLM(
+    num_tokens= 20000,
+    dim = 512,
+    depth = 6,
+    max_seq_len = 8192,
+    ff_chunks = 8,
+    ff_dropout = 0.1,
+    ff_mult = 6,
+    ff_activation = nn.LeakyReLU,
+)
+
+x = torch.randint(0, 20000, (1, 8192)).long()
+y = model(x) # (1, 8192, 20000)
+```
+
 ## Research
 
 To access the attention weights and bucket distribution, simply wrap the instantiated model with the `Recorder` wrapper class.
