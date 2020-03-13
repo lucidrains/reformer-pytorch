@@ -34,7 +34,7 @@ class TrainingWrapper(nn.Module):
         self.net = Autopadder(net)
         self.max_seq_len = net.max_seq_len
 
-    def generate(self, start_tokens, seq_len, max_seq_len = None, eos_token = None, temperature = 1., filter_logits_fn = top_k, filter_thres = 0.9, **kwargs):
+    def generate(self, start_tokens, seq_len, eos_token = None, temperature = 1., filter_logits_fn = top_k, filter_thres = 0.9, **kwargs):
         num_dims = len(start_tokens.shape)
 
         if num_dims == 1:
@@ -47,7 +47,7 @@ class TrainingWrapper(nn.Module):
 
         for _ in range(seq_len):
             x = out[:, -self.max_seq_len:]
-            logits = self.net(x)[:, -1, :]
+            logits = self.net(x, **kwargs)[:, -1, :]
             filtered_logits = filter_logits_fn(logits, thres = filter_thres)
             probs = F.softmax(filtered_logits / temperature, dim=-1)
             sample = torch.multinomial(probs, 1)
