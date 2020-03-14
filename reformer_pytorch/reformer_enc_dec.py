@@ -55,6 +55,7 @@ class ReformerEncDec(nn.Module):
     def generate(self, seq_in, seq_out_start, seq_len, **kwargs):
         enc_kwargs, dec_kwargs, kwargs = extract_enc_dec_kwargs(kwargs)
         enc_keys = self.enc(seq_in, **enc_kwargs)
+        dec_kwargs.setdefault('context_mask', enc_kwargs['input_mask'])
         return self.dec.generate(seq_out_start, seq_len, keys = enc_keys, **{**dec_kwargs, **kwargs})
 
     def forward(self, seq_in, seq_out, return_loss = False, **kwargs):
