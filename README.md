@@ -228,6 +228,42 @@ enc_keys = encoder(visual_emb)
 yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 ```
 
+## Reformer Encoder Decoder Architecture
+
+By popular demand, I have coded up a wrapper that removes a lot of the manual work in writing up a generic Reformer encoder / decoder architecture. To use, you would import the `ReformerEncDec` class. Encoder keyword arguments would be passed with a `enc_` prefix and decoder keyword arguments with `dec_`. The model dimension (`dim`) must be prefix free and will be shared between encoder and decoder. The framework will also take care of passing the encoder input mask to the decoder context mask, unless explicitly overridden.
+
+```python
+import torch
+from reformer_pytorch import ReformerEncDec
+
+DE_SEQ_LEN = 4096
+EN_SEQ_LEN = 4096
+
+enc_dec = ReformerEncDec(
+    dim = 512,
+    enc_num_tokens = 20000,
+    enc_depth = 6,
+    enc_max_seq_len = DE_SEQ_LEN,
+    dec_num_tokens = 20000,
+    dec_depth = 6,
+    dec_max_seq_len = EN_SEQ_LEN
+).cuda()
+
+train_seq_in = torch.randint(0, 20000, (1, DE_SEQ_LEN)).long().cuda()
+train_seq_out = torch.randint(0, 20000, (1, EN_SEQ_LEN)).long().cuda()
+input_mask = torch.ones(1, DE_SEQ_LEN).bool().cuda()
+
+loss = enc_dec(train_seq_in, train_seq_out, return_loss = True, enc_input_mask = input_mask)
+loss.backward()
+# learn
+
+# evaluate with the following
+eval_seq_in = torch.randint(0, 20000, (1, DE_SEQ_LEN)).long().cuda()
+eval_seq_out_start = torch.tensor([[0.]]).long().cuda() # assume 0 is id of start token
+samples = enc_dec.generate(eval_seq_in, eval_seq_out_start, seq_len = EN_SEQ_LEN, eos_token = 1) # assume 1 is id of stop token
+print(samples.shape) # (1, <= 1024) decode the tokens
+```
+
 ## Customizing Feedforward
 
 By default, the activation function is `GELU`. If you would like an alternative activation function, you can pass in the class to the keyword `ff_activation`.
