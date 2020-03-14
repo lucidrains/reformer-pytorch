@@ -33,18 +33,17 @@ def extract_enc_dec_kwargs(kwargs):
     return enc_kwargs, dec_kwargs, kwargs
 
 class ReformerEncDec(nn.Module):
-    def __init__(self, **kwargs):
+    def __init__(self, dim, **kwargs):
         super().__init__()
-        enc_kwargs, dec_kwargs, kwargs = extract_enc_dec_kwargs(kwargs)
+        enc_kwargs, dec_kwargs, _ = extract_enc_dec_kwargs(kwargs)
         
         assert 'return_embedding' not in enc_kwargs, 'you cannot manually set the return embeddings flag for the encoder'
         assert 'dim' not in dec_kwargs and 'dim' not in enc_kwargs, 'you must set the dim for both encoder and decoder'
 
+        enc_kwargs['dim'] = dec_kwargs['dim'] = dim
         enc_kwargs['return_embeddings'] = True
-        enc_kwargs['dim'] = kwargs['dim']
-        enc_kwargs.setdefault('bucket_size', 64)
 
-        dec_kwargs['dim'] = kwargs['dim']
+        enc_kwargs.setdefault('bucket_size', 64)
         dec_kwargs.setdefault('bucket_size', enc_kwargs['bucket_size'] * 2)
 
         enc = ReformerLM(**enc_kwargs)
