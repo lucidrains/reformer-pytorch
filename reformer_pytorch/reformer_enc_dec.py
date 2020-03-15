@@ -1,8 +1,6 @@
 import re
-import torch
 from torch import nn
 from reformer_pytorch.reformer_pytorch import ReformerLM
-from reformer_pytorch.autopadder import Autopadder
 from reformer_pytorch.generative_tools import TrainingWrapper
 
 ENC_PREFIX = 'enc_'
@@ -33,7 +31,7 @@ def extract_enc_dec_kwargs(kwargs):
     return enc_kwargs, dec_kwargs, kwargs
 
 class ReformerEncDec(nn.Module):
-    def __init__(self, dim, **kwargs):
+    def __init__(self, dim, ignore_index = -100, pad_value = 0, **kwargs):
         super().__init__()
         enc_kwargs, dec_kwargs, _ = extract_enc_dec_kwargs(kwargs)
         
@@ -49,8 +47,8 @@ class ReformerEncDec(nn.Module):
         enc = ReformerLM(**enc_kwargs)
         dec = ReformerLM(**dec_kwargs)
 
-        self.enc = Autopadder(enc)
-        self.dec = TrainingWrapper(dec)
+        self.enc = TrainingWrapper(enc, ignore_index = ignore_index, pad_value = pad_value)
+        self.dec = TrainingWrapper(dec, ignore_index = ignore_index, pad_value = pad_value)
 
     def generate(self, seq_in, seq_out_start, seq_len, **kwargs):
         enc_kwargs, dec_kwargs, kwargs = extract_enc_dec_kwargs(kwargs)
