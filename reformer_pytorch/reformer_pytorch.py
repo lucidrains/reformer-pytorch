@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+from torch.nn import Identity
 import torch.nn.functional as F
 from torch.autograd import Function
 from functools import partial, reduce
@@ -55,10 +56,6 @@ def max_neg_value(tensor):
     return -torch.finfo(tensor.dtype).max
 
 # helper classes
-
-class Identity(nn.Module):
-    def forward(self, x):
-        return x
 
 class MatrixMultiply(nn.Module):
     def __init__(self, tensor, transpose = False, normalize = False):

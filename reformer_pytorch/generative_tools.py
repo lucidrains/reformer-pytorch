@@ -34,7 +34,9 @@ class TrainingWrapper(nn.Module):
         self.net = Autopadder(net)
         self.max_seq_len = net.max_seq_len
 
+    @torch.no_grad()
     def generate(self, start_tokens, seq_len, eos_token = None, temperature = 1., filter_logits_fn = top_k, filter_thres = 0.9, **kwargs):
+        was_training = self.net.training
         num_dims = len(start_tokens.shape)
 
         if num_dims == 1:
@@ -60,6 +62,7 @@ class TrainingWrapper(nn.Module):
         if num_dims == 1:
             out = out.squeeze(0)
 
+        self.net.train(was_training)
         return out
 
     def forward(self, x, return_loss = False, **kwargs):
