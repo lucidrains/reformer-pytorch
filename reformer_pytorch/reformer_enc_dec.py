@@ -30,6 +30,12 @@ def extract_enc_dec_kwargs(kwargs):
     dec_kwargs, kwargs = group_by_key_prefix_and_remove_prefix(DEC_PREFIX, kwargs)
     return enc_kwargs, dec_kwargs, kwargs
 
+def extract_and_set_enc_dec_kwargs(kwargs):
+    enc_kwargs, dec_kwargs, kwargs = extract_enc_dec_kwargs(kwargs)
+    if 'input_mask' in enc_kwargs:
+        dec_kwargs.setdefault('context_mask', enc_kwargs['input_mask'])
+    return enc_kwargs, dec_kwargs, kwargs
+
 class ReformerEncDec(nn.Module):
     def __init__(self, dim, ignore_index = -100, pad_value = 0, **kwargs):
         super().__init__()
@@ -40,6 +46,7 @@ class ReformerEncDec(nn.Module):
 
         enc_kwargs['dim'] = dec_kwargs['dim'] = dim
         enc_kwargs['return_embeddings'] = True
+        dec_kwargs['causal'] = True
 
         enc_kwargs.setdefault('bucket_size', 64)
         dec_kwargs.setdefault('bucket_size', enc_kwargs['bucket_size'] * 2)
@@ -51,13 +58,11 @@ class ReformerEncDec(nn.Module):
         self.dec = TrainingWrapper(dec, ignore_index = ignore_index, pad_value = pad_value)
 
     def generate(self, seq_in, seq_out_start, seq_len, **kwargs):
-        enc_kwargs, dec_kwargs, kwargs = extract_enc_dec_kwargs(kwargs)
+        enc_kwargs, dec_kwargs, kwargs = extract_and_set_enc_dec_kwargs(kwargs)
         enc_keys = self.enc(seq_in, **enc_kwargs)
-        dec_kwargs.setdefault('context_mask', enc_kwargs['input_mask'])
         return self.dec.generate(seq_out_start, seq_len, keys = enc_keys, **{**dec_kwargs, **kwargs})
 
     def forward(self, seq_in, seq_out, return_loss = False, **kwargs):
-        enc_kwargs, dec_kwargs, kwargs = extract_enc_dec_kwargs(kwargs)
+        enc_kwargs, dec_kwargs, kwargs = extract_and_set_enc_dec_kwargs(kwargs)
         enc_keys = self.enc(seq_in, **enc_kwargs)
-        dec_kwargs.setdefault('context_mask', enc_kwargs['input_mask'])
         return self.dec(seq_out, return_loss = return_loss, keys = enc_keys, **dec_kwargs)
