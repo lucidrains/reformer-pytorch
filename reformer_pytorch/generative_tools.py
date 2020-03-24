@@ -46,14 +46,23 @@ class TrainingWrapper(nn.Module):
 
         self.net.eval()
         out = start_tokens
+        input_mask = kwargs.pop('input_mask')
+
+        if input_mask is None:
+            input_mask = torch.full_like(out, True, dtype=torch.bool, device=out.device)
 
         for _ in range(seq_len):
             x = out[:, -self.max_seq_len:]
-            logits = self.net(x, **kwargs)[:, -1, :]
+            input_mask = input_mask[:, -self.max_seq_len:]
+
+            logits = self.net(x, input_mask=input_mask, **kwargs)[:, -1, :]
             filtered_logits = filter_logits_fn(logits, thres = filter_thres)
             probs = F.softmax(filtered_logits / temperature, dim=-1)
             sample = torch.multinomial(probs, 1)
+
             out = torch.cat((out, sample), dim=-1)
+            input_mask = F.pad(input_mask, (0, 1), value=True)
+
             if eos_token is not None and (sample == eos_token).all():
                 break
 
