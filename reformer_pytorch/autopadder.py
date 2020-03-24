@@ -1,4 +1,5 @@
 import math
+import torch
 from torch import nn
 import torch.nn.functional as F
 
@@ -26,7 +27,7 @@ class Autopadder(nn.Module):
         self.full_attn_thres = reformer.full_attn_thres
 
     def forward(self, x, **kwargs):
-        b, t, m = *x.shape[:2], self.num_mem_kv
+        b, t, m, device = *x.shape[:2], self.num_mem_kv, x.device
 
         keys = kwargs.get('keys')
         input_mask = kwargs.get('input_mask')
@@ -36,6 +37,9 @@ class Autopadder(nn.Module):
         seqlen = t + m + k_len
 
         if seqlen > self.full_attn_thres:
+            if input_mask is None:
+                input_mask = torch.full_like(x, True, device=x.device, dtype=torch.bool)
+
             x = pad_to_multiple(x, seqlen, self.bucket_size * 2, dim=self.pad_dim)
 
             if input_mask is not None:
