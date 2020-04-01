@@ -46,7 +46,7 @@ class TrainingWrapper(nn.Module):
 
         self.net.eval()
         out = start_tokens
-        input_mask = kwargs.pop('input_mask')
+        input_mask = kwargs.pop('input_mask', None)
 
         if input_mask is None:
             input_mask = torch.full_like(out, True, dtype=torch.bool, device=out.device)
