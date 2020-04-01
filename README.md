@@ -253,7 +253,7 @@ train_seq_in = torch.randint(0, 20000, (1, DE_SEQ_LEN)).long().cuda()
 train_seq_out = torch.randint(0, 20000, (1, EN_SEQ_LEN)).long().cuda()
 input_mask = torch.ones(1, DE_SEQ_LEN).bool().cuda()
 
-loss = enc_dec(train_seq_in, train_seq_out, return_loss = True, enc_input_mask = input_mask)
+loss = enc_dec(train_seq_in, train_seq_out, return_loss = True, input_attn_mask = input_mask)
 loss.backward()
 # learn
 
