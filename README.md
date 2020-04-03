@@ -1,6 +1,6 @@
 ## 🚫 Deprecated
 
-This project has been abandoned due to reported poor performance (https://github.com/lucidrains/reformer-pytorch/issues/69). A new approach is being explored, which will live at https://github.com/lucidrains/sinkhorn-transformer
+This project has been abandoned due to reported <a href="https://github.com/lucidrains/reformer-pytorch/issues/69">poor performance</a>. A new approach is being explored, which will live <a href="https://github.com/lucidrains/sinkhorn-transformer">here</a>.
 
 If anyone in their research found a way to make LSH attention work better, please send me an email and I will consider resuming the project, if the improvement is significant.
 
