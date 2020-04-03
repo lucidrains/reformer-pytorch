@@ -1,3 +1,7 @@
+## 🚫 Deprecated
+
+This project has been abandoned due to reported poor performance (https://github.com/lucidrains/reformer-pytorch/issues/69). A new approach is being explored, which will live at https://github.com/lucidrains/sinkhorn-transformer
+
 ## Reformer, the Efficient Transformer, in Pytorch
 [![PyPI version](https://badge.fury.io/py/reformer-pytorch.svg)](https://badge.fury.io/py/reformer-pytorch)
 
