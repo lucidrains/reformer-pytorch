@@ -1,10 +1,6 @@
-## 🚫 Deprecated
+A new approach to sparse attention is being explored <a href="https://github.com/lucidrains/sinkhorn-transformer">here</a>.
 
-This project has been abandoned due to reported <a href="https://github.com/lucidrains/reformer-pytorch/issues/69">poor performance</a>. A new approach is being explored, which will live <a href="https://github.com/lucidrains/sinkhorn-transformer">here</a>.
-
-If anyone in their research found a way to make LSH attention work better, please send me an email and I will consider resuming the project, if the improvement is significant.
-
-## ~~Reformer, the Efficient Transformer, in Pytorch~~
+## Reformer, the Efficient Transformer, in Pytorch
 [![PyPI version](https://badge.fury.io/py/reformer-pytorch.svg)](https://badge.fury.io/py/reformer-pytorch)
 
 <img src="./lsh_attention.png" width="500">
