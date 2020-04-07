@@ -4,10 +4,10 @@ import torch.nn as nn
 from torch.nn import Identity
 import torch.nn.functional as F
 from torch.autograd import Function
-from functools import partial, reduce
+from functools import partial, reduce, wraps
 from itertools import chain
 from operator import mul
-from reformer_pytorch.reversible import ReversibleBlock, ReversibleSequence
+from reformer_pytorch.reversible import ReversibleSequence
 
 #constants
 
@@ -39,8 +39,15 @@ def chunked_sum(tensor, chunks=1):
     summed_tensors = [c.sum(dim=-1) for c in tensor.chunk(chunks, dim=0)]
     return torch.cat(summed_tensors, dim=0).reshape(orig_size)
 
+def default(val, default_val):
+    return default_val if val is None else val
+
+def max_neg_value(tensor):
+    return -torch.finfo(tensor.dtype).max
+
 def cache_fn(f):
     cache = None
+    @wraps(f)
     def cached_fn(*args, **kwargs):
         nonlocal cache
         if cache is not None:
@@ -49,11 +56,25 @@ def cache_fn(f):
         return cache
     return cached_fn
 
-def default(val, default_val):
-    return default_val if val is None else val
+def cache_method_decorator(cache_attr, cache_key, execute_in_cache = False):
+    def inner_fn(fn):
+        @wraps(fn)
+        def wrapper(self, *args, namespace=None, get_from_cache=False, set_cache=True, **kwargs):
+            namespace_str = str(default(namespace, ''))
+            _cache = getattr(self, cache_attr)
+            _keyname = f'{cache_key}:{namespace_str}'
 
-def max_neg_value(tensor):
-    return -torch.finfo(tensor.dtype).max
+            if get_from_cache:
+                if execute_in_cache:
+                    fn(self, *args, **kwargs)
+                val = _cache[_keyname]
+            else:
+                val = fn(self, *args, **kwargs)
+                if set_cache:
+                    setattr(self, cache_attr, {**_cache, **{_keyname: val}})
+            return val
+        return wrapper
+    return inner_fn
 
 # helper classes
 
@@ -98,9 +119,9 @@ class Chunk(nn.Module):
         self.chunks = chunks
         self.fn = fn
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         chunks = x.chunk(self.chunks, dim = self.dim)
-        return torch.cat([self.fn(c) for c in chunks], dim = self.dim)
+        return torch.cat([self.fn(c, **kwargs) for c in chunks], dim = self.dim)
 
 # LSH attention as described in https://openreview.net/pdf?id=rkgNKkHtvB
 # adapted from trax, stripped to what paper said needed to work
@@ -145,6 +166,10 @@ class LSHAttention(nn.Module):
         # will expend extra computation to return attention matrix
         self._return_attn = return_attn
 
+        # cache buckets for reversible network, reported by authors to make Reformer work at depth
+        self._cache = {}
+
+    @cache_method_decorator('_cache', 'buckets', execute_in_cache=True)
     def hash_vectors(self, n_buckets, vecs):
         batch_size = vecs.shape[0]
         device = vecs.device
@@ -191,17 +216,17 @@ class LSHAttention(nn.Module):
 
         return buckets
 
-    def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None):
-        batch_size, seqlen, dim = qk.shape
+    def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None, **kwargs):
+        batch_size, seqlen, dim, device = *qk.shape, qk.device
+
+        query_len = default(query_len, seqlen)
+        is_reverse = kwargs.pop('_reverse', False)
+        depth = kwargs.pop('_depth', None)
 
         assert seqlen % (self.bucket_size * 2) == 0, f'Sequence length ({seqlen}) needs to be divisible by target bucket size  x 2 - {self.bucket_size * 2}'
 
-        query_len = default(query_len, seqlen)
-        device = qk.device
-
         n_buckets = seqlen // self.bucket_size
-
-        buckets = self.hash_vectors(n_buckets, qk)
+        buckets = self.hash_vectors(n_buckets, qk, namespace=depth, get_from_cache=is_reverse, set_cache=self.training)
 
         # We use the same vector as both a query and a key.
         assert int(buckets.shape[1]) == self.n_hashes * seqlen
@@ -386,7 +411,7 @@ class FullQKAttention(nn.Module):
         self.causal = causal
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None):
+    def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None, **kwargs):
         b, seq_len, dim = qk.shape
         query_len = default(query_len, seq_len)
         t = query_len
@@ -454,7 +479,7 @@ class LSHSelfAttention(nn.Module):
 
         self.callback = None
 
-    def forward(self, x, keys = None, input_mask = None, input_attn_mask = None, context_mask = None):
+    def forward(self, x, keys = None, input_mask = None, input_attn_mask = None, context_mask = None, **kwargs):
         device, dtype = x.device, x.dtype
         b, t, e, h, m = *x.shape, self.heads, self.num_mem_kv
 
@@ -496,7 +521,7 @@ class LSHSelfAttention(nn.Module):
             masks['input_attn_mask'] = input_attn_mask
 
         attn_fn = self.lsh_attn if not use_full_attn else self.full_attn
-        partial_attn_fn = partial(attn_fn, query_len = t)
+        partial_attn_fn = partial(attn_fn, query_len = t, **kwargs)
         attn_fn_in_chunks = process_inputs_chunk(partial_attn_fn, chunks = self.attn_chunks)
 
         out, attn, buckets = attn_fn_in_chunks(qk, v, **masks)
@@ -527,7 +552,7 @@ class FeedForward(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(dim * mult, dim))
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         return self.net(x)
 
 # positional embeddings
@@ -623,7 +648,7 @@ class Reformer(nn.Module):
 
             blocks.append(nn.ModuleList([f, g]))
 
-        self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout, reverse_thres = reverse_thres)
+        self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout, reverse_thres = reverse_thres, send_signal = True)
 
     def forward(self, x, **kwargs):
         x = torch.cat([x, x], dim = -1)

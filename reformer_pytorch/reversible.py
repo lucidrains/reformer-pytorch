@@ -39,14 +39,21 @@ class Deterministic(nn.Module):
 # heavily inspired by https://github.com/RobinBruegger/RevTorch/blob/master/revtorch/revtorch.py
 # once multi-GPU is confirmed working, refactor and send PR back to source
 class ReversibleBlock(nn.Module):
-    def __init__(self, f, g):
+    def __init__(self, f, g, depth=None, send_signal = False):
         super().__init__()
         self.f = Deterministic(f)
         self.g = Deterministic(g)
 
+        self.depth = depth
+        self.send_signal = send_signal
+
     def forward(self, x, f_args = {}, g_args = {}):
         x1, x2 = torch.chunk(x, 2, dim=2)
         y1, y2 = None, None
+
+        if self.send_signal:
+            f_args['_reverse'] = g_args['_reverse'] = False
+            f_args['_depth'] = g_args['_depth'] = self.depth
 
         with torch.no_grad():
             y1 = x1 + self.f(x2, record_rng=self.training, **f_args)
@@ -60,6 +67,10 @@ class ReversibleBlock(nn.Module):
 
         dy1, dy2 = torch.chunk(dy, 2, dim=2)
         del dy
+
+        if self.send_signal:
+            f_args['_reverse'] = g_args['_reverse'] = True
+            f_args['_depth'] = g_args['_depth'] = self.depth
 
         with torch.enable_grad():
             y1.requires_grad = True
@@ -123,12 +134,12 @@ class _ReversibleFunction(Function):
         return dy, None, None
 
 class ReversibleSequence(nn.Module):
-    def __init__(self, blocks, layer_dropout = 0., reverse_thres = 0):
+    def __init__(self, blocks, layer_dropout = 0., reverse_thres = 0, send_signal = False):
         super().__init__()
         self.layer_dropout = layer_dropout
         self.reverse_thres = reverse_thres
 
-        self.blocks = nn.ModuleList([ReversibleBlock(f=f, g=g) for f, g in blocks])
+        self.blocks = nn.ModuleList([ReversibleBlock(f, g, depth, send_signal) for depth, (f, g) in enumerate(blocks)])
         self.irrev_blocks = nn.ModuleList([IrreversibleBlock(f=f, g=g) for f, g in blocks])
 
     def forward(self, x, arg_route = (True, True), **kwargs):
