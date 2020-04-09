@@ -284,6 +284,7 @@ model = ReformerLM(
     ff_dropout = 0.1,
     ff_mult = 6,
     ff_activation = nn.LeakyReLU,
+    ff_glu = True # use GLU in feedforward, from paper 'GLU Variants Improve Transformer'
 )
 
 x = torch.randint(0, 20000, (1, 8192)).long()
@@ -455,6 +456,15 @@ print(sample.shape) # (1, <=100) token ids
     journal ={ArXiv},
     year    ={2019},
     volume  ={abs/1911.02150}
+}
+```
+
+```bibtex
+@misc{shazeer2020glu,
+    title   = {GLU Variants Improve Transformer},
+    author  = {Noam Shazeer},
+    year    = {2020},
+    url     = {https://arxiv.org/abs/2002.05202}    
 }
 ```
 
