@@ -303,7 +303,9 @@ class LSHAttention(nn.Module):
 
         # Causal masking
         if self.causal:
-            mask = bq_t[:, :, :, None] < bkv_t[:, :, None, :].clamp(max=query_len - 1)
+            mask = bq_t[:, :, :, None] < bkv_t[:, :, None, :]
+            if seqlen > query_len:
+                mask = mask & (bkv_t[:, :, None, :] < query_len)
             dots.masked_fill_(mask, masked_value)
             del mask
 

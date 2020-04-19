@@ -1,5 +1,3 @@
-A new approach to sparse attention is being explored <a href="https://github.com/lucidrains/sinkhorn-transformer">here</a>.
-
 ## Reformer, the Efficient Transformer, in Pytorch
 [![PyPI version](https://badge.fury.io/py/reformer-pytorch.svg)](https://badge.fury.io/py/reformer-pytorch)
 
@@ -231,6 +229,8 @@ yo = decoder(yi, keys = enc_keys) # (1, 4096, 20000)
 ```
 
 ## Reformer Encoder Decoder Architecture
+
+**There is a bug in versions < `0.21.0`. Please upgrade to at least the version specified for the working encoder / decoder Reformer.**
 
 By popular demand, I have coded up a wrapper that removes a lot of the manual work in writing up a generic Reformer encoder / decoder architecture. To use, you would import the `ReformerEncDec` class. Encoder keyword arguments would be passed with a `enc_` prefix and decoder keyword arguments with `dec_`. The model dimension (`dim`) must be prefix free and will be shared between encoder and decoder. The framework will also take care of passing the encoder input mask to the decoder context mask, unless explicitly overridden.
 
