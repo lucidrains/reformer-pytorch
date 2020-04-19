@@ -33,13 +33,11 @@ def add_argument():
 
 # constants
 
-NUM_BATCHES = int(1e5)
-BATCH_SIZE = 4
+EPOCHS = 20
 GRADIENT_ACCUMULATE_EVERY = 4
-LEARNING_RATE = 1e-4
 VALIDATE_EVERY  = 100
 GENERATE_EVERY  = 500
-GENERATE_LENGTH = 512
+GENERATE_LENGTH = 1024
 SEQ_LEN = 4096
 
 # helpers
@@ -101,27 +99,28 @@ model_engine, optimizer, trainloader, _ = deepspeed.initialize(args=cmd_args, mo
 
 # training
 
-for i, data in enumerate(trainloader):
-    model_engine.train()
-    data = data.to(model_engine.local_rank)
-    loss = model_engine(data, return_loss = True)
-    model_engine.backward(loss)
-    model_engine.step()
-    print(loss.item())
+for _ in range(EPOCHS):
+    for i, data in enumerate(trainloader):
+        model_engine.train()
+        data = data.to(model_engine.local_rank)
+        loss = model_engine(data, return_loss = True)
+        model_engine.backward(loss)
+        model_engine.step()
+        print(loss.item() * GRADIENT_ACCUMULATE_EVERY)
 
-    if i % VALIDATE_EVERY == 0:
-        model.eval()
-        with torch.no_grad():
+        if i % VALIDATE_EVERY == 0:
+            model.eval()
+            with torch.no_grad():
+                inp = random.choice(val_dataset)[:-1]
+                loss = model(inp[None, :].cuda(), return_loss = True)
+                print(f'validation loss: {loss.item()}')
+
+        if i % GENERATE_EVERY == 0:
+            model.eval()
             inp = random.choice(val_dataset)[:-1]
-            loss = model(inp[None, :].cuda(), return_loss = True)
-            print(f'validation loss: {loss.item()}')
+            prime = decode_tokens(inp)
+            print(f'%s \n\n %s', (prime, '*' * 100))
 
-    if i % GENERATE_EVERY == 0:
-        model.eval()
-        inp = random.choice(val_dataset)[:-1]
-        prime = decode_tokens(inp)
-        print(f'%s \n\n %s', (prime, '*' * 100))
-
-        sample = model.generate(inp.cuda(), GENERATE_LENGTH)
-        output_str = decode_tokens(sample)
-        print(output_str)
+            sample = model.generate(inp.cuda(), GENERATE_LENGTH)
+            output_str = decode_tokens(sample)
+            print(output_str)
