@@ -471,4 +471,13 @@ print(sample.shape) # (1, <=100) token ids
 }
 ```
 
+```bibtex
+@misc{bachlechner2020rezero,
+    title   = {ReZero is All You Need: Fast Convergence at Large Depth},
+    author  = {Thomas Bachlechner and Bodhisattwa Prasad Majumder and Huanru Henry Mao and Garrison W. Cottrell and Julian McAuley},
+    year    = {2020},
+    url     = {https://arxiv.org/abs/2003.04887}
+}
+```
+
 [♥](https://www.youtube.com/watch?v=GUo2XuqMcCU)
