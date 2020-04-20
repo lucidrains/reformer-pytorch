@@ -62,6 +62,7 @@ model = ReformerLM(
     lsh_dropout = 0.1,
     weight_tie = True,
     causal = True,
+    n_local_attn_heads = 4,
     use_full_attn = False # set this to true for comparison with full attention
 )
 
