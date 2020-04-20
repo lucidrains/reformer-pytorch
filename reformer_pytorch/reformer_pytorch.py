@@ -569,7 +569,7 @@ class LSHSelfAttention(nn.Module):
         self.mem_kv = nn.Parameter(torch.randn(1, num_mem_kv, dim, requires_grad=True)) if num_mem_kv > 0 else None
 
         self.n_local_attn_heads = n_local_attn_heads
-        self.local_attn = LocalAttention(bucket_size=bucket_size, causal=causal, dropout=dropout, shared_qk=True, look_forward=(1 if not causal else 0))
+        self.local_attn = LocalAttention(bucket_size=bucket_size * 2, causal=causal, dropout=dropout, shared_qk=True, look_forward=(1 if not causal else 0))
 
         self.callback = None
 
