@@ -118,6 +118,15 @@ class MatrixMultiply(nn.Module):
             tensor = tensor.t()
         return x @ tensor
 
+class ReZero(nn.Module):
+    def __init__(self, fn):
+        super().__init__()
+        self.g = nn.Parameter(torch.zeros(1))
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        return self.fn(x, **kwargs) * self.g
+
 class ScaleNorm(nn.Module):
     def __init__(self, dim, eps=1e-5):
         super().__init__()
@@ -128,7 +137,7 @@ class ScaleNorm(nn.Module):
         n = torch.norm(x, dim=-1, keepdim=True).clamp(min=self.eps)
         return x / n * self.g
 
-class WithNorm(nn.Module):
+class PreNorm(nn.Module):
     def __init__(self, norm_class, dim, fn):
         super().__init__()
         self.norm = norm_class(dim)
@@ -733,7 +742,7 @@ class AxialPositionalEncoding(nn.Module):
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., ff_activation = None, ff_mult = 4, ff_glu = False, post_attn_dropout = 0., layer_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, n_local_attn_heads = 0):
+    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., ff_activation = None, ff_mult = 4, ff_glu = False, post_attn_dropout = 0., layer_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_rezero = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, n_local_attn_heads = 0):
         super().__init__()
         self.dim = dim
         self.depth = depth
@@ -752,14 +761,17 @@ class Reformer(nn.Module):
             get_ff = cache_fn(get_ff)
 
         blocks = []
+
         norm_type = ScaleNorm if use_scale_norm else nn.LayerNorm
+
+        residual_fn_wrapper = ReZero if use_rezero else partial(PreNorm, norm_type, dim)
 
         for _ in range(depth):
             attn = get_attn()
             parallel_net = get_attn() if twin_attention else get_ff()
 
-            f = WithNorm(norm_type, dim, attn)
-            g = WithNorm(norm_type, dim, parallel_net)
+            f = residual_fn_wrapper(attn)
+            g = residual_fn_wrapper(parallel_net)
 
             if not twin_attention and ff_chunks > 1:
                 g = Chunk(ff_chunks, g, along_dim = -2)
@@ -772,10 +784,10 @@ class Reformer(nn.Module):
         x = torch.cat([x, x], dim = -1)
         arg_route = (True, self.twin_attention)
         x = self.layers(x, arg_route = arg_route, **kwargs)
-        return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
+        return torch.stack(x.chunk(2, dim=-1)).sum(dim=0) / 2
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., ff_mult = 4, ff_activation = None, ff_glu = False, post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, weight_tie_embedding = False, fixed_position_emb = False, axial_position_emb = False, axial_position_shape = (), axial_position_dims = (), n_local_attn_heads = 0):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., ff_mult = 4, ff_activation = None, ff_glu = False, post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_rezero = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, weight_tie_embedding = False, fixed_position_emb = False, axial_position_emb = False, axial_position_shape = (), axial_position_dims = (), n_local_attn_heads = 0):
         super().__init__()
         emb_dim = default(emb_dim, dim)
         self.max_seq_len = max_seq_len
@@ -792,7 +804,7 @@ class ReformerLM(nn.Module):
         else:
             self.pos_emb = AbsolutePositionalEmbedding(emb_dim, max_seq_len)
 
-        self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, ff_mult = ff_mult, ff_activation = ff_activation, ff_glu = ff_glu, ff_dropout = ff_dropout, post_attn_dropout = 0., layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head, n_local_attn_heads = n_local_attn_heads)
+        self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, ff_mult = ff_mult, ff_activation = ff_activation, ff_glu = ff_glu, ff_dropout = ff_dropout, post_attn_dropout = 0., layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_rezero = use_rezero, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head, n_local_attn_heads = n_local_attn_heads)
 
         if return_embeddings:
             self.out = Identity()
