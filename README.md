@@ -48,6 +48,7 @@ model = ReformerLM(
     full_attn_thres = 1024, # use full attention if context length is less than set value
     reverse_thres = 1024,   # turn off reversibility for 2x speed for sequence lengths shorter or equal to the designated value
     use_scale_norm = False,  # use scale norm from 'Transformers without tears' paper
+    use_rezero = False,      # remove normalization and use rezero from 'ReZero is All You Need'
     one_value_head = False,  # use one set of values for all heads from 'One Write-Head Is All You Need'
     weight_tie = False,           # tie parameters of each layer for no memory per additional depth
     weight_tie_embedding = False, # use token embedding for projection of output, some papers report better results
