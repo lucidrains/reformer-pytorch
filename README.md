@@ -51,6 +51,7 @@ model = ReformerLM(
     one_value_head = False,  # use one set of values for all heads from 'One Write-Head Is All You Need'
     weight_tie = False,           # tie parameters of each layer for no memory per additional depth
     weight_tie_embedding = False, # use token embedding for projection of output, some papers report better results
+    n_local_attn_heads = 2,       # many papers suggest mixing local attention heads aids specialization and improves on certain tasks
     use_full_attn = False    # only turn on this flag to override and turn on full attention for all sequence lengths. for comparison with LSH to show that it is working
 ).cuda()
 
@@ -434,21 +435,21 @@ print(sample.shape) # (1, <=100) token ids
 
 ```bibtex
 @inproceedings{fan2020reducing,
-    title     ={Reducing Transformer Depth on Demand with Structured Dropout},
-    author    ={Angela Fan and Edouard Grave and Armand Joulin},
-    booktitle ={International Conference on Learning Representations},
-    year      ={2020},
-    url       ={https://openreview.net/forum?id=SylO2yStDr}
+    title     = {Reducing Transformer Depth on Demand with Structured Dropout},
+    author    = {Angela Fan and Edouard Grave and Armand Joulin},
+    booktitle = {International Conference on Learning Representations},
+    year      = {2020},
+    url       = {https://openreview.net/forum?id=SylO2yStDr}
 }
 ```
 
 ```bibtex
 @article{Shazeer2019FastTD,
-    title   ={Fast Transformer Decoding: One Write-Head is All You Need},
-    author  ={Noam Shazeer},
-    journal ={ArXiv},
-    year    ={2019},
-    volume  ={abs/1911.02150}
+    title   = {Fast Transformer Decoding: One Write-Head is All You Need},
+    author  = {Noam Shazeer},
+    journal = {ArXiv},
+    year    = {2019},
+    volume  = {abs/1911.02150}
 }
 ```
 
@@ -458,6 +459,15 @@ print(sample.shape) # (1, <=100) token ids
     author  = {Noam Shazeer},
     year    = {2020},
     url     = {https://arxiv.org/abs/2002.05202}    
+}
+```
+
+```bibtex
+@misc{roy*2020efficient,
+    title   = {Efficient Content-Based Sparse Attention with Routing Transformers},
+    author  = {Aurko Roy* and Mohammad Taghi Saffar* and David Grangier and Ashish Vaswani},
+    year    = {2020},
+    url     = {https://openreview.net/forum?id=B1gjs6EtDr}
 }
 ```
 
