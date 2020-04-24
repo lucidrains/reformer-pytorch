@@ -123,6 +123,8 @@ out, attn, buckets = attn(qk, v) # (10, 1024, 128)
 
 This repository supports masks on the input sequence `input_mask (b x i_seq)`, the context sequence `context_mask (b x c_seq)`, as well as the rarely used full attention matrix itself `input_attn_mask (b x i_seq x i_seq)`, all made compatible with LSH attention. Masks are made of booleans where `False` denotes masking out prior to the softmax.
 
+The causal triangular mask is all taken care of for you if you set `causal = True`.
+
 ```python
 import torch
 from reformer_pytorch import ReformerLM
