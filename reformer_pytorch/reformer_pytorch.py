@@ -641,8 +641,8 @@ class LSHSelfAttention(nn.Module):
             self.callback(attn.reshape(b, h, t, -1), buckets.reshape(b, h, -1))
 
         if has_local:
-            lq = lk = lqk[:, :t]
-            local_out = self.local_attn(lq, lk, lv, input_mask=input_mask)
+            lqk, lv = lqk[:, :t], lv[:, :t]
+            local_out = self.local_attn(lqk, lqk, lv, input_mask=input_mask)
             local_out = local_out.reshape(b, l_h, t, -1)
             out = out.reshape(b, lsh_h, t, -1)
             out = torch.cat((local_out, out), dim=1)
