@@ -119,6 +119,36 @@ out, attn, buckets = attn(qk, v) # (10, 1024, 128)
 # buckets will contain the bucket number (post-argmax) of each token of each batch
 ```
 
+## Masking
+
+This repository supports masks on the input sequence `input_mask (b x i_seq)`, the context sequence `context_mask (b x c_seq)`, as well as the rarely used full attention matrix itself `input_attn_mask (b x i_seq x i_seq)`, all made compatible with LSH attention. Masks are made of booleans where `False` denotes masking out prior to the softmax.
+
+```python
+import torch
+from reformer_pytorch import ReformerLM
+
+CONTEXT_LEN = 512
+SEQ_LEN = 8192
+
+model = ReformerLM(
+    num_tokens= 20000,
+    dim = 1024,
+    depth = 1,
+    max_seq_len = SEQ_LEN,
+    ff_chunks = 8,
+    causal = True
+)
+
+c = torch.randn(1, CONTEXT_LEN, 1024)
+x = torch.randint(0, 20000, (1, SEQ_LEN)).long()
+
+i_mask = torch.ones(1, SEQ_LEN).bool()
+c_mask = torch.ones(1, CONTEXT_LEN).bool()
+
+y = model(x, keys = c, input_mask = i_mask, context_mask = c_mask)
+# masking done correctly in LSH attention
+```
+
 ## Positional Embeddings
 
 <a href="https://github.com/AranKomat">Aran</a> has informed me that the Reformer team used axial position embeddings with great results on longer sequences. I tested it out and indeed it works very well! If you choose to use it, you will have to pass in 2 additional hyperparameters in addition to turning on a flag.
