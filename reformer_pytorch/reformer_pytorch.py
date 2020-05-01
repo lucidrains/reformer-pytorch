@@ -688,7 +688,6 @@ class AbsolutePositionalEmbedding(nn.Module):
     def __init__(self, dim, max_seq_len):
         super().__init__()
         self.emb = nn.Embedding(max_seq_len, dim)
-        self.emb.weight.data.uniform_(-0.01, 0.01)
 
     def forward(self, x):
         t = torch.arange(x.shape[1], device=x.device)
@@ -787,22 +786,23 @@ class Reformer(nn.Module):
         return torch.stack(x.chunk(2, dim=-1)).mean(dim=0)
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., ff_mult = 4, ff_activation = None, ff_glu = False, post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_rezero = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, weight_tie_embedding = False, fixed_position_emb = False, axial_position_emb = False, axial_position_shape = (), axial_position_dims = (), n_local_attn_heads = 0):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., ff_mult = 4, ff_activation = None, ff_glu = False, post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_rezero = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, weight_tie_embedding = False, fixed_position_emb = False, absolute_position_emb = False, axial_position_shape = None, axial_position_dims = None, n_local_attn_heads = 0):
         super().__init__()
         emb_dim = default(emb_dim, dim)
         self.max_seq_len = max_seq_len
 
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
-        self.token_emb.weight.data.uniform_(-0.01, 0.01)
 
         self.to_model_dim = Identity() if emb_dim == dim else nn.Linear(emb_dim, dim)
 
-        if axial_position_emb:
-            self.pos_emb = AxialPositionalEncoding(emb_dim, max_seq_len, axial_position_shape, axial_position_dims)
+        if absolute_position_emb:
+            self.pos_emb = AbsolutePositionalEmbedding(emb_dim, max_seq_len)
         elif fixed_position_emb:
             self.pos_emb = FixedPositionalEmbedding(emb_dim)
         else:
-            self.pos_emb = AbsolutePositionalEmbedding(emb_dim, max_seq_len)
+            axial_position_shape = default(axial_position_shape, (max_seq_len // bucket_size, bucket_size))
+            axial_position_dims = default(axial_position_dims, (emb_dim // 2, emb_dim // 2))
+            self.pos_emb = AxialPositionalEncoding(emb_dim, max_seq_len, axial_position_shape, axial_position_dims)
 
         self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, ff_mult = ff_mult, ff_activation = ff_activation, ff_glu = ff_glu, ff_dropout = ff_dropout, post_attn_dropout = 0., layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_rezero = use_rezero, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head, n_local_attn_heads = n_local_attn_heads)
 
