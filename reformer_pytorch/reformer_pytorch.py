@@ -154,6 +154,8 @@ class Chunk(nn.Module):
         self.fn = fn
 
     def forward(self, x, **kwargs):
+        if self.chunks == 1:
+            return self.fn(x, **kwargs)
         chunks = x.chunk(self.chunks, dim = self.dim)
         return torch.cat([self.fn(c, **kwargs) for c in chunks], dim = self.dim)
 
@@ -753,7 +755,7 @@ class Reformer(nn.Module):
         self.full_attn_thres = full_attn_thres
 
         get_attn = lambda: LSHSelfAttention(dim, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, post_attn_dropout = post_attn_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, one_value_head = one_value_head, n_local_attn_heads = n_local_attn_heads)
-        get_ff = lambda: FeedForward(dim, dropout = ff_dropout, activation = ff_activation, mult = ff_mult, glu = ff_glu)
+        get_ff = lambda: Chunk(ff_chunks, FeedForward(dim, dropout = ff_dropout, activation = ff_activation, mult = ff_mult, glu = ff_glu), along_dim = -2)
 
         if weight_tie:
             get_attn = cache_fn(get_attn)
@@ -771,9 +773,6 @@ class Reformer(nn.Module):
 
             f = residual_fn_wrapper(attn)
             g = residual_fn_wrapper(parallel_net)
-
-            if not twin_attention and ff_chunks > 1:
-                g = Chunk(ff_chunks, g, along_dim = -2)
 
             blocks.append(nn.ModuleList([f, g]))
 
