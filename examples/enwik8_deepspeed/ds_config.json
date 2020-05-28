@@ -15,7 +15,7 @@
     }
   },
   "fp16": {
-    "enabled": false,
+    "enabled": true,
     "loss_scale": 0,
     "loss_scale_window": 1000,
     "hysteresis": 2,
@@ -29,5 +29,6 @@
       "warmup_num_steps": 1000
     }
   },
+  "zero_optimization": true,
   "wall_clock_breakdown": false
 }
