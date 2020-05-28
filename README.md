@@ -430,6 +430,11 @@ sample = model.generate(initial, 100, temperature=1., filter_thres = 0.9, eos_to
 print(sample.shape) # (1, <=100) token ids
 ```
 
+## Alternatives
+
+1. Routing Transformer - https://github.com/lucidrains/routing-transformer
+2. Sinkhorn Transformer - https://github.com/lucidrains/sinkhorn-transformer
+
 ## Citations
 ```bibtex
 @inproceedings{kitaev2020reformer,
