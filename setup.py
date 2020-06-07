@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
   name = 'reformer_pytorch',
   packages = find_packages(exclude=['examples', 'pretraining']),
-  version = '0.23.1',
+  version = '1.0.0',
   license='MIT',
   description = 'Reformer, the Efficient Transformer, Pytorch',
   author = 'Phil Wang',
@@ -11,7 +11,8 @@ setup(
   url = 'https://github.com/lucidrains/reformer-pytorch',
   keywords = ['transformers', 'attention', 'artificial intelligence'],
   install_requires=[
-      'torch'
+      'torch',
+      'product-key-memory'
   ],
   classifiers=[
       'Development Status :: 4 - Beta',

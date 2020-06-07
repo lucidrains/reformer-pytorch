@@ -53,6 +53,8 @@ model = ReformerLM(
     weight_tie = False,           # tie parameters of each layer for no memory per additional depth
     weight_tie_embedding = False, # use token embedding for projection of output, some papers report better results
     n_local_attn_heads = 2,       # many papers suggest mixing local attention heads aids specialization and improves on certain tasks
+    pkm_layers = (4,7),           # specify layers to use product key memory. paper shows 1 or 2 modules near the middle of the transformer is best
+    pkm_num_keys = 128,           # defaults to 128, but can be increased to 256 or 512 as memory allows
     use_full_attn = False    # only turn on this flag to override and turn on full attention for all sequence lengths. for comparison with LSH to show that it is working
 ).cuda()
 
@@ -515,6 +517,16 @@ print(sample.shape) # (1, <=100) token ids
     author  = {Thomas Bachlechner and Bodhisattwa Prasad Majumder and Huanru Henry Mao and Garrison W. Cottrell and Julian McAuley},
     year    = {2020},
     url     = {https://arxiv.org/abs/2003.04887}
+}
+```
+
+```bibtex
+@misc{lample2019large,
+    title   = {Large Memory Layers with Product Keys},
+    author  = {Guillaume Lample and Alexandre Sablayrolles and Marc'Aurelio Ranzato and Ludovic Denoyer and Hervé Jégou},
+    year    = {2019},
+    eprint  = {1907.05242},
+    archivePrefix = {arXiv}
 }
 ```
 
