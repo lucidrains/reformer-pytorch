@@ -302,6 +302,12 @@ samples = enc_dec.generate(eval_seq_in, eval_seq_out_start, seq_len = EN_SEQ_LEN
 print(samples.shape) # (1, <= 1024) decode the tokens
 ```
 
+## Product Key Memory
+
+To see the benefits of using PKM, the learning rate of the values must be set higher than the rest of the parameters. (Recommended to be `1e-2`)
+
+You can follow the instructions here to set it correctly https://github.com/lucidrains/product-key-memory#learning-rates
+
 ## Customizing Feedforward
 
 By default, the activation function is `GELU`. If you would like an alternative activation function, you can pass in the class to the keyword `ff_activation`.
