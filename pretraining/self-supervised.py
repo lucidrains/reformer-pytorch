@@ -247,13 +247,15 @@ class ReformerTrainer(object):
                         loss /= gradient_accumulation_steps
 
                     loss.backward()
-                    optimizer.step()
-                    self.model.zero_grad()
 
                     step_loss += loss.item()
                     losses[global_steps] = loss.item()
                     local_steps += 1
                     global_steps += 1
+
+                    if global_steps % gradient_accumulation_steps == 0:
+                        optimizer.step()
+                        self.model.zero_grad()
 
                     if global_steps % log_steps == 0:
                         if self.tb_writer:
