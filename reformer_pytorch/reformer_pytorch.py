@@ -402,7 +402,9 @@ class LSHAttention(nn.Module):
 
         class UnsortLogits(Function):
             @staticmethod
-            def forward(ctx, so, slogits):
+            def forward(ctx, so, slogits, total_hashes):
+                ctx.total_hashes = total_hashes  # attach n_hashes to context
+
                 so = so.detach()
                 slogits = slogits.detach()
                 o = batched_index_select(so, undo_sort)
@@ -411,11 +413,27 @@ class LSHAttention(nn.Module):
 
             @staticmethod
             def backward(ctx, grad_x, grad_y):
-                so_grad = batched_index_select(grad_x, sticker)
-                _, slogits_grad = sort_key_val(buckets_and_t, grad_y, dim=-1)
-                return so_grad, slogits_grad
+                total_hashes = ctx.total_hashes
 
-        o, logits = UnsortLogits.apply(so, slogits)
+                grad_x_shape = grad_x.shape # Batch size, Seq Len * Num Hashes, Dim per Head
+                grad_y_shape = grad_y.shape # Batch size, Seq Len * Num Hashes
+
+                # factor tensor by num hashes
+                # Seq Len * Num Hashes => Seq Len, Num Hashes
+                grad_x = grad_x.view(grad_x_shape[0], -1, total_hashes, grad_x_shape[-1])
+                grad_y = grad_y.view(grad_y_shape[0], -1, total_hashes)
+
+                reshaped_st = st.view(st.shape[0], -1, total_hashes).unsqueeze(-1).expand(grad_x.shape)
+                reshaped_buckets_and_t = buckets_and_t.view(buckets_and_t.shape[0], -1, total_hashes)
+
+                so_grad = torch.gather(grad_x, 1, reshaped_st)
+                _, slogits_grad = sort_key_val(reshaped_buckets_and_t, grad_y, dim=-1)
+
+                so_grad = torch.reshape(so_grad, grad_x_shape)
+                slogits_grad = torch.reshape(slogits_grad, grad_y_shape)
+                return so_grad, slogits_grad, None
+
+        o, logits = UnsortLogits.apply(so, slogits, total_hashes)
         o = torch.reshape(o, (batch_size, total_hashes, seqlen, dim))
         logits = torch.reshape(logits, (batch_size, total_hashes, seqlen, 1))
 
