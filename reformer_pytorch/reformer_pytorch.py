@@ -426,11 +426,13 @@ class LSHAttention(nn.Module):
                 reshaped_st = st.view(st.shape[0], -1, total_hashes).unsqueeze(-1).expand(grad_x.shape)
                 reshaped_buckets_and_t = buckets_and_t.view(buckets_and_t.shape[0], -1, total_hashes)
 
+                # sort for each hash separately
                 so_grad = torch.gather(grad_x, 1, reshaped_st)
                 _, slogits_grad = sort_key_val(reshaped_buckets_and_t, grad_y, dim=-1)
 
                 so_grad = torch.reshape(so_grad, grad_x_shape)
                 slogits_grad = torch.reshape(slogits_grad, grad_y_shape)
+
                 return so_grad, slogits_grad, None
 
         o, logits = UnsortLogits.apply(so, slogits, total_hashes)
