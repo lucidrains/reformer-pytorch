@@ -646,7 +646,7 @@ class LSHSelfAttention(nn.Module):
         out, attn, buckets = attn_fn_in_chunks(qk, v, **masks)
 
         if self.callback is not None:
-            self.callback(attn.reshape(b, h, t, -1), buckets.reshape(b, h, -1))
+            self.callback(attn.reshape(b, lsh_h, t, -1), buckets.reshape(b, lsh_h, -1))
 
         if has_local:
             lqk, lv = lqk[:, :t], lv[:, :t]
