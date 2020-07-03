@@ -442,6 +442,8 @@ print(sample.shape) # (1, <=100) token ids
 
 1. Routing Transformer - https://github.com/lucidrains/routing-transformer
 2. Sinkhorn Transformer - https://github.com/lucidrains/sinkhorn-transformer
+3. Linear Transformer - https://github.com/lucidrains/linear-attention-transformer/
+4. Compressive Transformer - https://github.com/lucidrains/compressive-transformer-pytorch
 
 ## Citations
 ```bibtex
