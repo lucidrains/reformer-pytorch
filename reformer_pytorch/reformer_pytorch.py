@@ -8,6 +8,7 @@ from functools import partial, reduce, wraps
 from itertools import chain
 from operator import mul
 
+from local_attention import LocalAttention
 from axial_positional_embedding import AxialPositionalEmbedding
 from product_key_memory import PKM
 from reformer_pytorch.reversible import ReversibleSequence
@@ -81,13 +82,6 @@ def cache_method_decorator(cache_attr, cache_namespace, reexecute = False):
             return val
         return wrapper
     return inner_fn
-
-def look_around(x, backward = 1, forward = 0, pad_value = -1, dim = 2):
-    t = x.shape[1]
-    dims = (len(x.shape) - dim) * (0, 0)
-    padded_x = F.pad(x, (*dims, backward, forward), value= pad_value)
-    tensors = [padded_x[:, ind:(ind + t), ...] for ind in range(forward + backward + 1)]
-    return torch.cat(tensors, dim=dim)
 
 def expand_dim(dim, k, t):
     t = t.unsqueeze(dim)
@@ -441,75 +435,6 @@ class LSHAttention(nn.Module):
         # return output, attention matrix, and bucket distribution
         return out, attn, buckets
 
-# local attention
-
-class LocalAttention(nn.Module):
-    def __init__(self, bucket_size, causal = False, look_backward = 1, look_forward = 0, dropout = 0., shared_qk = False):
-        super().__init__()
-        assert not (causal and look_forward > 0), 'you cannot look forward if causal'
-        self.bucket_size = bucket_size
-        self.causal = causal
-        self.look_backward = look_backward
-        self.look_forward = look_forward
-        self.shared_qk = shared_qk
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, q, k, v, input_mask = None):
-        b, t, e, device, dtype = *q.shape, q.device, q.dtype
-        bucket_size, causal, look_backward, look_forward, shared_qk = self.bucket_size, self.causal, self.look_backward, self.look_forward, self.shared_qk
-
-        buckets = t // bucket_size
-
-        if shared_qk:
-            k = F.normalize(k, 2, dim=-1).type_as(q)
-
-        ticker = torch.arange(t, device=device, dtype=dtype)[None, :]
-        b_t = ticker.reshape(1, buckets, bucket_size)
-
-        bucket_fn = lambda t: t.reshape(b, buckets, bucket_size, -1)
-        bq, bk, bv = map(bucket_fn, (q, k, v))
-
-        look_around_kwargs = {'backward': look_backward, 'forward': look_forward}
-        bk = look_around(bk, **look_around_kwargs)
-        bv = look_around(bv, **look_around_kwargs)
-
-        bq_t = b_t
-        bq_k = look_around(b_t, **look_around_kwargs)
-
-        dots = torch.einsum('bhie,bhje->bhij', bq, bk) * (e ** -0.5)
-        mask_value = max_neg_value(dots)
-
-        if shared_qk:
-            mask = bq_t[:, :, :, None] == bq_k[:, :, None, :]
-            dots.masked_fill_(mask, TOKEN_SELF_ATTN_VALUE)
-            del mask
-
-        if causal:
-            mask = bq_t[:, :, :, None] < bq_k[:, :, None, :]
-            dots.masked_fill_(mask, mask_value)
-            del mask
-
-        mask = bq_k[:, :, None, :] == -1
-        dots.masked_fill_(mask, mask_value)
-        del mask
-
-        if input_mask is not None:
-            h = b // input_mask.shape[0]
-            input_mask = input_mask.reshape(-1, buckets, bucket_size)
-            mq = mk = input_mask
-            mk = look_around(mk, pad_value=False, **look_around_kwargs)
-            mask = (mq[:, None, :, :, None] * mk[:, None, :, None, :])
-            mask = merge_dims(0, 1, mask.expand(-1, h, -1, -1, -1))
-            dots.masked_fill_(~mask, mask_value)
-            del mask
-
-        attn = dots.softmax(dim=-1)
-        attn = self.dropout(attn)
-
-        out = torch.einsum('bhij,bhje->bhie', attn, bv)
-        out = out.reshape(b, t, e)
-        return out
-
 # simple full attention
 
 class FullQKAttention(nn.Module):
@@ -586,7 +511,7 @@ class LSHSelfAttention(nn.Module):
         self.mem_kv = nn.Parameter(torch.randn(1, num_mem_kv, dim, requires_grad=True)) if num_mem_kv > 0 else None
 
         self.n_local_attn_heads = n_local_attn_heads
-        self.local_attn = LocalAttention(bucket_size=bucket_size * 2, causal=causal, dropout=dropout, shared_qk=True, look_forward=(1 if not causal else 0))
+        self.local_attn = LocalAttention(window_size=bucket_size * 2, causal=causal, dropout=dropout, shared_qk=True, look_forward=(1 if not causal else 0))
 
         self.callback = None
 
