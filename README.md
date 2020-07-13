@@ -41,6 +41,7 @@ model = ReformerLM(
     bucket_size = 64,     # average size of qk per bucket, 64 was recommended in paper
     n_hashes = 4,         # 4 is permissible per author, 8 is the best but slower
     emb_dim = 128,        # embedding factorization for further memory savings
+    dim_head = 64,        # be able to fix the dimension of each head, making it independent of the embedding dimension and the number of heads
     ff_chunks = 200,      # number of chunks for feedforward layer, make higher if there are memory issues
     attn_chunks = 8,      # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
     num_mem_kv = 128,       # persistent learned memory key values, from all-attention paper
@@ -535,6 +536,15 @@ print(sample.shape) # (1, <=100) token ids
     year    = {2019},
     eprint  = {1907.05242},
     archivePrefix = {arXiv}
+}
+```
+
+```bibtex
+@misc{bhojanapalli2020lowrank,
+    title   = {Low-Rank Bottleneck in Multi-head Attention Models},
+    author  = {Srinadh Bhojanapalli and Chulhee Yun and Ankit Singh Rawat and Sashank J. Reddi and Sanjiv Kumar},
+    year    = {2020},
+    eprint  = {2002.07028}
 }
 ```
 
