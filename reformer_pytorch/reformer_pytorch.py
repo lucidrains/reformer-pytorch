@@ -273,7 +273,7 @@ class LSHAttention(nn.Module):
 
         # Hash-based sort ("s" at the start of variable names means "sorted")
         sbuckets_and_t, sticker = sort_key_val(buckets_and_t, ticker, dim=-1)
-        _, undo_sort = sort_key_val(sticker, ticker, dim=-1)
+        _, undo_sort = sticker.sort(dim=-1)
         del ticker
 
         sbuckets_and_t = sbuckets_and_t.detach()
@@ -397,10 +397,9 @@ class LSHAttention(nn.Module):
         class UnsortLogits(Function):
             @staticmethod
             def forward(ctx, so, slogits):
-                so = so.detach()
-                slogits = slogits.detach()
+                so, slogits = map(torch.detach, (so, slogits))
                 o = batched_index_select(so, undo_sort)
-                _, logits = sort_key_val(sticker, slogits, dim=-1)
+                logits = slogits.gather(1, undo_sort)
                 return o, logits
 
             @staticmethod
