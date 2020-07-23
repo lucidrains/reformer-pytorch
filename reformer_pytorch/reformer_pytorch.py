@@ -394,21 +394,10 @@ class LSHAttention(nn.Module):
         so = torch.reshape(bo, (batch_size, -1, dim))
         slogits = torch.reshape(dots_logsumexp, (batch_size, -1,))
 
-        class UnsortLogits(Function):
-            @staticmethod
-            def forward(ctx, so, slogits):
-                so, slogits = map(torch.detach, (so, slogits))
-                o = batched_index_select(so, undo_sort)
-                logits = slogits.gather(1, undo_sort)
-                return o, logits
+        # unsort logits
+        o = batched_index_select(so, undo_sort)
+        logits = slogits.gather(1, undo_sort)
 
-            @staticmethod
-            def backward(ctx, grad_x, grad_y):
-                so_grad = batched_index_select(grad_x, sticker)
-                _, slogits_grad = sort_key_val(buckets_and_t, grad_y, dim=-1)
-                return so_grad, slogits_grad
-
-        o, logits = UnsortLogits.apply(so, slogits)
         o = torch.reshape(o, (batch_size, total_hashes, seqlen, dim))
         logits = torch.reshape(logits, (batch_size, total_hashes, seqlen, 1))
 
