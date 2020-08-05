@@ -473,7 +473,7 @@ class FullQKAttention(nn.Module):
 class LSHSelfAttention(nn.Module):
     def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, dim_head = None, attn_chunks = 1, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, one_value_head = False, use_full_attn = False, full_attn_thres = None, return_attn = False, post_attn_dropout = 0., dropout = 0., n_local_attn_heads = 0, **kwargs):
         super().__init__()
-        assert dim % heads == 0, 'dimensions must be divisible by number of heads'
+        assert dim_head or (dim % heads) == 0, 'dimensions must be divisible by number of heads'
         assert n_local_attn_heads < heads, 'local attention heads must be less than number of heads'
 
         dim_head = default(dim_head, dim // heads)
