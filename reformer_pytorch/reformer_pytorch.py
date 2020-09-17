@@ -512,7 +512,7 @@ class LSHSelfAttention(nn.Module):
         b, t, e, h, dh, m, l_h = *x.shape, self.heads, self.dim_head, self.num_mem_kv, self.n_local_attn_heads
 
         mem_kv = default(self.mem_kv, torch.empty(b, 0, e, dtype=dtype, device=device))
-        mem = mem_kv.expand(-1, m, -1)
+        mem = mem_kv.expand(b, m, -1)
 
         keys = default(keys, torch.empty(b, 0, e, dtype=dtype, device=device))
         c = keys.shape[1]
@@ -699,7 +699,7 @@ class ReformerLM(nn.Module):
         elif fixed_position_emb:
             self.pos_emb = FixedPositionalEmbedding(emb_dim)
         else:
-            axial_position_shape = default(axial_position_shape, (max_seq_len // bucket_size, bucket_size))
+            axial_position_shape = default(axial_position_shape, (math.ceil(max_seq_len / bucket_size), bucket_size))
             self.pos_emb = AxialPositionalEmbedding(emb_dim, axial_position_shape)
 
         self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, dim_head = dim_head, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, ff_mult = ff_mult, ff_activation = ff_activation, ff_glu = ff_glu, ff_dropout = ff_dropout, post_attn_dropout = 0., layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_rezero = use_rezero, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head, n_local_attn_heads = n_local_attn_heads, pkm_layers = pkm_layers, pkm_num_keys = pkm_num_keys)
