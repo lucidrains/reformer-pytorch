@@ -38,7 +38,7 @@ class Autopadder(nn.Module):
 
         if seqlen > self.full_attn_thres:
             if input_mask is None:
-                input_mask = torch.full_like(x, True, device=x.device, dtype=torch.bool)
+                input_mask = torch.full((b, t), True, device=x.device, dtype=torch.bool)
 
             x = pad_to_multiple(x, seqlen, self.bucket_size * 2, dim=self.pad_dim)
 
