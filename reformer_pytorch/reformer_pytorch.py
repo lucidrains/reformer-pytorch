@@ -237,12 +237,12 @@ class LSHAttention(nn.Module):
         else:
             rotated_vecs = torch.cat([rotated_vecs, -rotated_vecs], dim=-1)
             # In this configuration, we map each item to the top self.n_hashes buckets
-            rotated_vectors = torch.squeeze(rotated_vecs, 0)
-            bucket_range = torch.arange(rotated_vectors.shape[-1], device=device)
+            rotated_vecs = torch.squeeze(rotated_vecs, 0)
+            bucket_range = torch.arange(rotated_vecs.shape[-1], device=device)
             bucket_range = torch.reshape(bucket_range, (1, -1))
-            bucket_range = bucket_range.expand_as(rotated_vectors)
+            bucket_range = bucket_range.expand_as(rotated_vecs)
 
-            _, buckets = sort_key_val(rotated_vectors, bucket_range, dim=-1)
+            _, buckets = sort_key_val(rotated_vecs, bucket_range, dim=-1)
             # buckets size [batch size, _rehash_each_round,seq_len, buckets]
             buckets = buckets[:, :, :, -self.n_hashes:]
 
