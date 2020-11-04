@@ -240,13 +240,14 @@ class LSHAttention(nn.Module):
             rotated_vecs = torch.squeeze(rotated_vecs, 0)
             bucket_range = torch.arange(rotated_vecs.shape[-1], device=device)
             bucket_range = torch.reshape(bucket_range, (1, -1))
-            bucket_range = bucket_range.expand_as(rotated_vecs.shape)
+            bucket_range = bucket_range.expand_as(rotated_vecs)
 
             _, buckets = sort_key_val(rotated_vecs, bucket_range, dim=-1)
-            buckets = buckets[:, -self.n_hashes:]
+            # buckets size [batch size, _rehash_each_round,seq_len, buckets]
+            buckets = buckets[:, :, :, -self.n_hashes:]
 
-            h, *_ = buckets.shape 
-            buckets = torch.reshape(buckets.permute((*_, h)), (-1,))
+            h, *_ = buckets.shape
+            buckets = torch.reshape(buckets, (h, -1))
 
         return buckets
 
