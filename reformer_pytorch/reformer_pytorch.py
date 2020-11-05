@@ -240,7 +240,7 @@ class LSHAttention(nn.Module):
 
             _, buckets = sort_key_val(rotated_vecs, bucket_range, dim=-1)
             # buckets size [batch size, seq_len, buckets]
-            buckets = buckets[:, :, -self.n_hashes:].transpose(1, 2)
+            buckets = buckets[... , -self.n_hashes:].transpose(1, 2)
 
         # buckets is now (self.n_hashes, seq_len). Next we add offsets so that
         # bucket numbers from different hashing rounds don't overlap.
