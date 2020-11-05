@@ -227,28 +227,26 @@ class LSHAttention(nn.Module):
         rotated_vecs = torch.einsum('btf,bfhi->bhti', dropped_vecs, random_rotations)
 
         if self._rehash_each_round:
+            # rotated_vectors size [batch,n_hash,seq_len,buckets]
             rotated_vecs = torch.cat([rotated_vecs, -rotated_vecs], dim=-1)
             buckets = torch.argmax(rotated_vecs, dim=-1)
-            # buckets is now (self.n_hashes, seqlen). Next we add offsets so that
-            # bucket numbers from different hashing rounds don't overlap.
-            offsets = torch.arange(self.n_hashes, device=device)
-            offsets = torch.reshape(offsets * n_buckets, (1, -1, 1))
-            buckets = torch.reshape(buckets + offsets, (batch_size, -1,))
         else:
             rotated_vecs = torch.cat([rotated_vecs, -rotated_vecs], dim=-1)
             # In this configuration, we map each item to the top self.n_hashes buckets
-            rotated_vecs = torch.squeeze(rotated_vecs, 0)
+            rotated_vecs = torch.squeeze(rotated_vecs, 1)
             bucket_range = torch.arange(rotated_vecs.shape[-1], device=device)
             bucket_range = torch.reshape(bucket_range, (1, -1))
             bucket_range = bucket_range.expand_as(rotated_vecs)
 
             _, buckets = sort_key_val(rotated_vecs, bucket_range, dim=-1)
-            # buckets size [batch size, _rehash_each_round,seq_len, buckets]
-            buckets = buckets[:, :, :, -self.n_hashes:]
+            # buckets size [batch size, seq_len, buckets]
+            buckets = buckets[... , -self.n_hashes:].transpose(1, 2)
 
-            h, *_ = buckets.shape
-            buckets = torch.reshape(buckets, (h, -1))
-
+        # buckets is now (self.n_hashes, seq_len). Next we add offsets so that
+        # bucket numbers from different hashing rounds don't overlap.
+        offsets = torch.arange(self.n_hashes, device=device)
+        offsets = torch.reshape(offsets * n_buckets, (1, -1, 1))
+        buckets = torch.reshape(buckets + offsets, (batch_size, -1,))
         return buckets
 
     def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None, **kwargs):
