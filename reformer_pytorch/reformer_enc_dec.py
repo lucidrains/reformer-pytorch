@@ -37,7 +37,7 @@ def extract_and_set_enc_dec_kwargs(kwargs):
     return enc_kwargs, dec_kwargs, kwargs
 
 class ReformerEncDec(nn.Module):
-    def __init__(self, dim, ignore_index = -100, pad_value = 0, **kwargs):
+    def __init__(self, dim, ignore_index = 0, pad_value = 0, **kwargs):
         super().__init__()
         enc_kwargs, dec_kwargs, _ = extract_enc_dec_kwargs(kwargs)
         
