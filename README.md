@@ -439,6 +439,11 @@ sample = model.generate(initial, 100, temperature=1., filter_thres = 0.9, eos_to
 print(sample.shape) # (1, <=100) token ids
 ```
 
+
+## Issues
+
+<a href="https://github.com/andreabac3">Andrea</a> has uncovered that using O2 optimization level when training with mixed precision can lead to instability. Please use O1 instead, which can be set with the `amp_level` in Pytorch Lightning, or `opt_level` in Nvidia's Apex library.
+
 ## Alternatives
 
 1. Routing Transformer - https://github.com/lucidrains/routing-transformer
