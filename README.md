@@ -5,7 +5,7 @@
 
 This is a Pytorch implementation of Reformer https://openreview.net/pdf?id=rkgNKkHtvB
 
-It includes LSH attention, reversible network, and chunking. It has been validated with an auto-regressive task (enwik8). It also includes additional features to make the entire network pure attention all the way down.
+It includes LSH attention, reversible network, and chunking. It has been validated with an auto-regressive task (enwik8).
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1am1DRl80Kd3o6n_4u3MomPzYS0NfdHAC) 32k tokens
 
@@ -45,7 +45,6 @@ model = ReformerLM(
     ff_chunks = 200,      # number of chunks for feedforward layer, make higher if there are memory issues
     attn_chunks = 8,      # process lsh attention in chunks, only way for memory to fit when scaling to 16k tokens
     num_mem_kv = 128,       # persistent learned memory key values, from all-attention paper
-    twin_attention = False, # both branches of the reversible network will be attention
     full_attn_thres = 1024, # use full attention if context length is less than set value
     reverse_thres = 1024,   # turn off reversibility for 2x speed for sequence lengths shorter or equal to the designated value
     use_scale_norm = False,  # use scale norm from 'Transformers without tears' paper
@@ -551,6 +550,15 @@ print(sample.shape) # (1, <=100) token ids
     author  = {Srinadh Bhojanapalli and Chulhee Yun and Ankit Singh Rawat and Sashank J. Reddi and Sanjiv Kumar},
     year    = {2020},
     eprint  = {2002.07028}
+}
+```
+
+```bibtex
+@misc{dong2021attention,
+    title   = {Attention is Not All You Need: Pure Attention Loses Rank Doubly Exponentially with Depth}, 
+    author  = {Yihe Dong and Jean-Baptiste Cordonnier and Andreas Loukas},
+    year    = {2021},
+    eprint  = {2103.03404}
 }
 ```
 

@@ -142,7 +142,7 @@ class ReversibleSequence(nn.Module):
         self.blocks = nn.ModuleList([ReversibleBlock(f, g, depth, send_signal) for depth, (f, g) in enumerate(blocks)])
         self.irrev_blocks = nn.ModuleList([IrreversibleBlock(f=f, g=g) for f, g in blocks])
 
-    def forward(self, x, arg_route = (True, True), **kwargs):
+    def forward(self, x, arg_route = (True, False), **kwargs):
         reverse = x.shape[1] > self.reverse_thres
         blocks = self.blocks if reverse else self.irrev_blocks
 
