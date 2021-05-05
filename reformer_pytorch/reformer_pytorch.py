@@ -656,9 +656,11 @@ def rotate_every_two(x):
 def apply_rotary_pos_emb(qk, sinu_pos):
     sinu_pos = rearrange(sinu_pos, '() n (j d) -> n j d', j = 2)
     sin, cos = sinu_pos.unbind(dim = -2)
-    sin, cos = map(lambda t: repeat(t, 'b n -> b (n j)', j = 2), (sin, cos))
+    sin, cos = map(lambda t: repeat(t, 'n d -> n (d j)', j = 2), (sin, cos))
+    seq_len = sin.shape[0]
+    qk, qk_pass = qk[:, :seq_len], qk[:, seq_len:]
     qk = (qk * cos) + (rotate_every_two(qk) * sin)
-    return qk
+    return torch.cat((qk, qk_pass), dim = 1)
 
 # reformer lm
 
