@@ -73,7 +73,6 @@ from reformer_pytorch import Reformer
 model = Reformer(
     dim = 512,
     depth = 12,
-    max_seq_len = 8192,
     heads = 8,
     lsh_dropout = 0.1,
     causal = True
