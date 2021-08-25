@@ -154,8 +154,11 @@ y = model(x, keys = c, input_mask = i_mask, context_mask = c_mask)
 
 ## Positional Embeddings
 
-<a href="https://github.com/AranKomat">Aran</a> has informed me that the Reformer team used axial position embeddings with great results on longer sequences. I tested it out and indeed it works very well! So well in fact that I have decided to make this the default. You can adjust the shape and dimension of the axial embeddings by following the instructions below.
+The default positional embedding uses <a href="https://arxiv.org/abs/2104.09864">rotary embeddings</a>.
 
+However, <a href="https://github.com/AranKomat">Aran</a> has informed me that the Reformer team used axial position embeddings with great results on longer sequences.
+
+You can turn on axial positional embedding and adjust the shape and dimension of the axial embeddings by following the instructions below.
 
 ```python
 import torch
@@ -169,8 +172,8 @@ model = ReformerLM(
     ff_chunks = 8,
     attn_chunks = 2,
     causal = True,
+    axial_position_emb = True,         # set this to True
     axial_position_shape = (128, 64),  # the shape must multiply up to the max_seq_len (128 x 64 = 8192)
-    axial_position_dims = (512, 512)   # the dims must sum up to the model dimensions (512 + 512 = 1024)
 )
 
 x = torch.randint(0, 20000, (1, 8192)).long()
