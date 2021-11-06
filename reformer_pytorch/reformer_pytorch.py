@@ -654,6 +654,7 @@ def rotate_every_two(x):
     return rearrange(x, '... d j -> ... (d j)')
 
 def apply_rotary_pos_emb(qk, sinu_pos):
+    sinu_pos = sinu_pos.type(qk.dtype)
     sinu_pos = rearrange(sinu_pos, '() n (j d) -> n j d', j = 2)
     sin, cos = sinu_pos.unbind(dim = -2)
     sin, cos = map(lambda t: repeat(t, 'n d -> n (d j)', j = 2), (sin, cos))
